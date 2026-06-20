@@ -6,6 +6,7 @@ use FastRoute\Dispatcher;
 use PHPUnit\Framework\TestCase;
 use Meritum\Http\Routing\Route;
 use Meritum\Http\Routing\Router;
+use Meritum\Http\Routing\RouteInterface;
 use Meritum\Http\Exception\NotFoundHttpException;
 use Meritum\Http\Exception\MethodNotAllowedHttpException;
 use Laminas\Diactoros\Response;
@@ -140,7 +141,7 @@ final class RouterTest extends TestCase
 
             public function handle(ServerRequestInterface $request): ResponseInterface
             {
-                $this->capturedRoute = $request->getAttribute('__route__');
+                $this->capturedRoute = $request->getAttribute(RouteInterface::class);
 
                 return new Response();
             }
@@ -154,6 +155,29 @@ final class RouterTest extends TestCase
         $router->handle($request);
 
         $this->assertSame('42', $capturedRoute->getArgument('id'));
+    }
+
+    public function test_route_is_set_on_legacy_attribute_key(): void
+    {
+        $capturedRoute = null;
+        $handler       = new class($capturedRoute) implements RequestHandlerInterface {
+            public function __construct(private mixed &$capturedRoute) {}
+
+            public function handle(ServerRequestInterface $request): ResponseInterface
+            {
+                $this->capturedRoute = $request->getAttribute('__route__');
+
+                return new Response();
+            }
+        };
+
+        $route      = new Route(['GET'], '/users/{id}', $handler);
+        $dispatcher = $this->dispatcher([[['GET'], '/users/{id}', $route]]);
+        $router     = new Router([], $dispatcher, $this->container());
+
+        $router->handle(new ServerRequest([], [], '/users/42', 'GET'));
+
+        $this->assertInstanceOf(RouteInterface::class, $capturedRoute);
     }
 
     public function test_resolves_string_handler_from_container(): void

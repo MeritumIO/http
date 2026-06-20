@@ -94,7 +94,8 @@ final class Router implements RequestHandlerInterface
 
         $route = $route->withArguments($arguments);
 
-        $request = $request->withAttribute('__route__', $route);
+        $request = $request->withAttribute('__route__', $route)
+                           ->withAttribute(RouteInterface::class, $route);
 
         $stack = [...$this->middleware, ...$route->getMiddleware(), new RequestHandlerMiddleware($handler)];
 

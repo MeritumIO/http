@@ -53,11 +53,13 @@ use Meritum\Http\Routing\RouteInterface;
 public function handle(ServerRequestInterface $request): ResponseInterface
 {
     /** @var RouteInterface $route */
-    $route = $request->getAttribute('__route__');
+    $route = $request->getAttribute(RouteInterface::class);
 
     $id = $route->getArgument('id');
 }
 ```
+
+The route is also available under the `'__route__'` string key as a convenience alias for code that does not import `RouteInterface`.
 
 ### Route middleware
 
