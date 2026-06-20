@@ -27,7 +27,7 @@ $kernel->boot();
 $kernel->run();
 ```
 
-`run()` resolves the incoming request from globals, passes it through the middleware pipeline, emits the response, calls `terminate()`, and shuts the kernel down.
+`run()` resolves the incoming request from globals, passes it through the middleware pipeline, emits the response, runs terminating callbacks via `terminate()`, then shuts the kernel down.
 
 ## Routing
 
@@ -172,7 +172,7 @@ $kernel->onTerminating(function (
 });
 ```
 
-Callbacks must be registered before `boot()`. By default, the kernel registers one terminating callback that calls `shutdown()`.
+Callbacks must be registered before `boot()`. `terminate()` does not shut the kernel down — shutdown happens automatically at the end of `run()`, after all terminating callbacks have completed.
 
 ## Handling requests directly
 
@@ -183,9 +183,12 @@ $kernel->boot();
 
 $response = $kernel->handle($request);
 
-// emit, then terminate
+// emit, terminate, then shut down manually
 $kernel->terminate($request, $response);
+$kernel->shutdown();
 ```
+
+When calling `handle()` directly, shutdown is your responsibility — it is not called automatically.
 
 ## Using modules
 

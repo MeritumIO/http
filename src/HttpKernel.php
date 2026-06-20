@@ -50,10 +50,6 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
             $this->define(RequestHandlerInterface::class, new RouterFactory($this->middleware, $this->routes))->share();
             $this->define(ServerRequestInterface::class, fn() => ServerRequestFactory::fromGlobals())->share();
         });
-
-        $this->onTerminating(function (ServerRequestInterface $request, ResponseInterface $response, KernelInterface $kernel) {
-            $kernel->shutdown();
-        });
     }
 
     private function throwIf(bool $condition, string $message): void
@@ -197,6 +193,8 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
         $this->requestProfile?->stopPhase('terminate');
 
         $this->requestProfile?->stop();
+
+        $this->shutdown();
 
         return 0;
     }

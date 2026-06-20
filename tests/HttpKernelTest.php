@@ -201,14 +201,12 @@ final class HttpKernelTest extends TestCase
         $this->assertSame($kernel, $captured[2]);
     }
 
-    public function test_default_terminate_callback_shuts_down_kernel(): void
+    public function test_terminate_does_not_shut_down_kernel(): void
     {
         $kernel = $this->createBootedKernel();
 
-        $this->assertFalse($kernel->isShutdown());
-
         $kernel->terminate(new ServerRequest(), new Response('php://temp', 200));
 
-        $this->assertTrue($kernel->isShutdown());
+        $this->assertFalse($kernel->isShutdown());
     }
 }
