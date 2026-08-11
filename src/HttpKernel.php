@@ -4,11 +4,7 @@ namespace Meritum\Http;
 
 use Throwable;
 use Georgeff\Kernel\Kernel;
-use Georgeff\Kernel\Environment;
-use Georgeff\Kernel\Debug\Profiler;
 use Georgeff\Kernel\KernelInterface;
-use Georgeff\Kernel\KernelException;
-use Georgeff\Kernel\ServiceRegistrar;
 use Meritum\Http\Emitter\SapiEmitter;
 use Meritum\Http\Routing\RouterFactory;
 use Psr\Http\Message\ResponseInterface;
@@ -19,12 +15,13 @@ use Laminas\Diactoros\ServerRequestFactory;
 use Psr\Http\Message\ServerRequestInterface;
 use Meritum\Http\Middleware\MiddlewareStack;
 use Psr\Http\Server\RequestHandlerInterface;
-use Meritum\Http\Exception\ExceptionHandlerInterface;
+use Georgeff\Kernel\Exception\KernelException;
+use Georgeff\Kernel\Contract\EnvironmentInterface;
+use Meritum\Http\Contract\ExceptionHandlerInterface;
+use Georgeff\Kernel\Contract\ContainerBuilderInterface;
 
 final class HttpKernel extends Kernel implements HttpKernelInterface
 {
-    private ?Profiler $requestProfile = null;
-
     private readonly RouteCollection $routes;
 
     private readonly MiddlewareStack $middleware;
@@ -34,9 +31,9 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
      */
     private array $terminatingCallbacks = [];
 
-    public function __construct(Environment $environment, ?ServiceRegistrar $registrar = null, bool $debug = false)
+    public function __construct(EnvironmentInterface $environment, ?ContainerBuilderInterface $builder = null, bool $debug = false)
     {
-        parent::__construct($environment, $registrar, $debug);
+        parent::__construct($environment, $builder, $debug);
 
         $this->routes     = new RouteCollection();
         $this->middleware = new MiddlewareStack();
@@ -62,17 +59,6 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
     private function throwIfShutdown(): void
     {
         $this->throwIf($this->isShutdown(), 'Kernel is shutdown');
-    }
-
-    private function initRequestProfile(): void
-    {
-        if (!$this->isDebug()) {
-            return;
-        }
-
-        $this->requestProfile = new Profiler();
-
-        $this->requestProfile->start();
     }
 
     public function addRoute(array|string $methods, string $uri, RequestHandlerInterface|string $handler): RouteInterface
@@ -108,49 +94,51 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
         $this->throwIf(!$this->isBooted(), 'Kernel cannot handle requests because it has not been booted');
 
-        $ownsProfile = null === $this->requestProfile;
+        $ownsProfile
+            = null !== $this->profiler
+            && false === $this->profiler->hasProfile('request');
 
-        if ($ownsProfile) {
-            $this->initRequestProfile();
-        }
+        $profile = $ownsProfile
+            ? $this->profiler->initProfile('request')
+            : $this->profiler?->getProfile('request');
 
-        $this->requestProfile?->startPhase('handle');
+        $profile?->startPhase('handle');
 
         /** @var RequestHandlerInterface $handler */
         $handler = $this->getContainer()->get(RequestHandlerInterface::class);
 
         try {
-            $this->requestProfile?->startPhase('middleware');
+            $profile?->startPhase('middleware');
 
             $response = $handler->handle($request);
 
-            $this->requestProfile?->stopPhase('middleware');
+            $profile?->stopPhase('middleware');
         } catch (Throwable $e) {
-            $this->requestProfile?->stopPhase('middleware');
+            $profile?->stopPhase('middleware');
 
             $exceptionHandler = $this->getExceptionHandler();
 
             if (null === $exceptionHandler) {
-                $this->requestProfile?->stopPhase('handle');
+                $profile?->stopPhase('handle');
 
                 if ($ownsProfile) {
-                    $this->requestProfile?->stop();
+                    $profile?->stop();
                 }
 
                 throw $e;
             }
 
-            $this->requestProfile?->startPhase('exceptionHandling');
+            $profile?->startPhase('exceptionHandling');
 
             $response = $exceptionHandler->handle($e, $request);
 
-            $this->requestProfile?->stopPhase('exceptionHandling');
+            $profile?->stopPhase('exceptionHandling');
         }
 
-        $this->requestProfile?->stopPhase('handle');
+        $profile?->stopPhase('handle');
 
         if ($ownsProfile) {
-            $this->requestProfile?->stop();
+            $profile?->stop();
         }
 
         return $response;
@@ -169,46 +157,34 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
         $this->throwIf(!$this->isBooted(), 'Kernel cannot run because it has not been booted');
 
-        $this->initRequestProfile();
+        $profile = $this->profiler?->initProfile('request');
 
-        $this->requestProfile?->startPhase('requestResolution');
+        $profile?->startPhase('requestResolution');
 
         /** @var ServerRequestInterface $request */
         $request = $this->getContainer()->get(ServerRequestInterface::class);
 
-        $this->requestProfile?->stopPhase('requestResolution');
+        $profile?->stopPhase('requestResolution');
 
         $response = $this->handle($request);
 
-        $this->requestProfile?->startPhase('emission');
+        $profile?->startPhase('emission');
 
         new SapiEmitter()->emit($response);
 
-        $this->requestProfile?->stopPhase('emission');
+        $profile?->stopPhase('emission');
 
-        $this->requestProfile?->startPhase('terminate');
+        $profile?->startPhase('terminate');
 
         $this->terminate($request, $response);
 
-        $this->requestProfile?->stopPhase('terminate');
+        $profile?->stopPhase('terminate');
 
-        $this->requestProfile?->stop();
+        $profile?->stop();
 
         $this->shutdown();
 
         return 0;
-    }
-
-    public function getDebugInfo(): array
-    {
-        /** @var array<string, mixed> $info */
-        $info = parent::getDebugInfo();
-
-        if (null !== $this->requestProfile) {
-            $info['requestProfile'] = $this->requestProfile->getDebugInfo();
-        }
-
-        return $info;
     }
 
     private function getExceptionHandler(): ?ExceptionHandlerInterface

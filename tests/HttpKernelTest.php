@@ -3,11 +3,11 @@
 namespace Meritum\Http\Test;
 
 use Throwable;
-use Georgeff\Kernel\Environment;
-use Georgeff\Kernel\KernelException;
 use Laminas\Diactoros\Response;
 use Laminas\Diactoros\ServerRequest;
-use Meritum\Http\Exception\ExceptionHandlerInterface;
+use Georgeff\Kernel\Exception\KernelException;
+use Georgeff\Kernel\Environment\Testing as TestingEnvironment;
+use Meritum\Http\Contract\ExceptionHandlerInterface;
 use Meritum\Http\HttpKernel;
 use Meritum\Http\HttpKernelInterface;
 use Meritum\Http\Routing\RouteInterface;
@@ -20,7 +20,7 @@ final class HttpKernelTest extends TestCase
 {
     private function createKernel(): HttpKernel
     {
-        return new HttpKernel(Environment::Testing);
+        return new HttpKernel(new TestingEnvironment());
     }
 
     private function createHandler(int $status = 200): RequestHandlerInterface
