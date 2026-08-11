@@ -11,6 +11,7 @@ use Psr\Http\Message\ResponseInterface;
 use Meritum\Http\Routing\RouteInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Meritum\Http\Routing\RouteCollection;
+use Meritum\Http\Contract\EmitterInterface;
 use Laminas\Diactoros\ServerRequestFactory;
 use Psr\Http\Message\ServerRequestInterface;
 use Meritum\Http\Middleware\MiddlewareStack;
@@ -44,26 +45,15 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
     private function configure(): void
     {
         $this->onBooting(function () {
+            $this->define(EmitterInterface::class, fn() => new SapiEmitter())->share();
             $this->define(RequestHandlerInterface::class, new RouterFactory($this->middleware, $this->routes))->share();
             $this->define(ServerRequestInterface::class, fn() => ServerRequestFactory::fromGlobals())->share();
         });
     }
 
-    private function throwIf(bool $condition, string $message): void
-    {
-        if ($condition) {
-            throw new KernelException($message);
-        }
-    }
-
-    private function throwIfShutdown(): void
-    {
-        $this->throwIf($this->isShutdown(), 'Kernel is shutdown');
-    }
-
     public function addRoute(array|string $methods, string $uri, RequestHandlerInterface|string $handler): RouteInterface
     {
-        $this->throwIf($this->isBooted(), 'Kernel has already booted, cannot add new routes');
+        KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot add new routes');
 
         $methods = is_string($methods) ? [$methods] : $methods;
 
@@ -72,7 +62,7 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
     public function addMiddleware(MiddlewareInterface|string $middleware): static
     {
-        $this->throwIf($this->isBooted(), 'Kernel has already booted, cannot modify the global middleware stack');
+        KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot add middleware to the global stack');
 
         $this->middleware->add($middleware);
 
@@ -81,7 +71,7 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
     public function onTerminating(callable $callback): static
     {
-        $this->throwIf($this->isBooted(), 'Kernel has already booted, cannot add on terminating callbacks');
+        KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot add terminating callbacks');
 
         $this->terminatingCallbacks[] = $callback;
 
@@ -90,9 +80,9 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        $this->throwIfShutdown();
+        KernelException::throwIf($this->isShutdown(), 'Kernel is shutdown');
 
-        $this->throwIf(!$this->isBooted(), 'Kernel cannot handle requests because it has not been booted');
+        KernelException::throwIfNot($this->isBooted(), 'Kernel cannot handle requests because it has not been booted');
 
         $ownsProfile
             = null !== $this->profiler
@@ -104,7 +94,6 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
         $profile?->startPhase('handle');
 
-        /** @var RequestHandlerInterface $handler */
         $handler = $this->getContainer()->get(RequestHandlerInterface::class);
 
         try {
@@ -153,15 +142,14 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
     public function run(): int
     {
-        $this->throwIfShutdown();
+        KernelException::throwIf($this->isShutdown(), 'Kernel is shutdown');
 
-        $this->throwIf(!$this->isBooted(), 'Kernel cannot run because it has not been booted');
+        $this->boot();
 
         $profile = $this->profiler?->initProfile('request');
 
         $profile?->startPhase('requestResolution');
 
-        /** @var ServerRequestInterface $request */
         $request = $this->getContainer()->get(ServerRequestInterface::class);
 
         $profile?->stopPhase('requestResolution');
@@ -170,7 +158,9 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
         $profile?->startPhase('emission');
 
-        new SapiEmitter()->emit($response);
+        $emitter = $this->getContainer()->get(EmitterInterface::class);
+
+        $emitter->emit($response);
 
         $profile?->stopPhase('emission');
 

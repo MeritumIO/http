@@ -7,6 +7,7 @@ use Laminas\Diactoros\Response;
 use Laminas\Diactoros\ServerRequest;
 use Georgeff\Kernel\Exception\KernelException;
 use Georgeff\Kernel\Environment\Testing as TestingEnvironment;
+use Meritum\Http\Contract\EmitterInterface;
 use Meritum\Http\Contract\ExceptionHandlerInterface;
 use Meritum\Http\HttpKernel;
 use Meritum\Http\HttpKernelInterface;
@@ -40,6 +41,19 @@ final class HttpKernelTest extends TestCase
         $kernel = $this->createKernel();
         $kernel->addRoute($method, $path, $this->createHandler());
         $kernel->boot();
+
+        return $kernel;
+    }
+
+    private function createRunnableKernel(string $path = '/test', string $method = 'GET'): HttpKernel
+    {
+        $kernel = $this->createKernel();
+        $kernel->addRoute($method, $path, $this->createHandler());
+
+        $kernel->override(ServerRequestInterface::class, fn() => new ServerRequest([], [], $path, $method))->share();
+        $kernel->override(EmitterInterface::class, fn() => new class implements EmitterInterface {
+            public function emit(ResponseInterface $response): void {}
+        })->share();
 
         return $kernel;
     }
@@ -208,5 +222,62 @@ final class HttpKernelTest extends TestCase
         $kernel->terminate(new ServerRequest(), new Response('php://temp', 200));
 
         $this->assertFalse($kernel->isShutdown());
+    }
+
+    public function test_run_executes_the_full_request_lifecycle(): void
+    {
+        $kernel = $this->createRunnableKernel();
+
+        $emitter = new class implements EmitterInterface {
+            public ?ResponseInterface $response = null;
+
+            public function emit(ResponseInterface $response): void
+            {
+                $this->response = $response;
+            }
+        };
+
+        $kernel->override(EmitterInterface::class, fn() => $emitter)->share();
+
+        $terminated = false;
+        $kernel->onTerminating(function () use (&$terminated) { $terminated = true; });
+
+        $exitCode = $kernel->run();
+
+        $this->assertSame(0, $exitCode);
+        $this->assertTrue($kernel->isBooted());
+        $this->assertTrue($kernel->isShutdown());
+        $this->assertTrue($terminated);
+        $this->assertSame(200, $emitter->response?->getStatusCode());
+    }
+
+    public function test_run_boots_an_unbooted_kernel(): void
+    {
+        $kernel = $this->createRunnableKernel();
+
+        $this->assertFalse($kernel->isBooted());
+
+        $kernel->run();
+
+        $this->assertTrue($kernel->isBooted());
+    }
+
+    public function test_run_does_not_throw_when_kernel_already_booted(): void
+    {
+        $kernel = $this->createRunnableKernel();
+        $kernel->boot();
+
+        $this->assertSame(0, $kernel->run());
+    }
+
+    public function test_run_throws_when_kernel_is_shutdown(): void
+    {
+        $kernel = $this->createRunnableKernel();
+        $kernel->boot();
+        $kernel->shutdown();
+
+        $this->expectException(KernelException::class);
+
+        $kernel->run();
     }
 }
