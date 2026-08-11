@@ -6,11 +6,11 @@ use Georgeff\Kernel\KernelInterface;
 use Psr\Http\Message\ResponseInterface;
 use Meritum\Http\Routing\RouteInterface;
 use Psr\Http\Server\MiddlewareInterface;
-use Georgeff\Kernel\RunnableKernelInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Georgeff\Kernel\Contract\RunnableKernelInterface;
 
-interface HttpKernelInterface extends KernelInterface, RunnableKernelInterface, RequestHandlerInterface
+interface HttpKernelInterface extends RunnableKernelInterface, RequestHandlerInterface
 {
     /**
      * @param string|non-empty-list<string> $methods
