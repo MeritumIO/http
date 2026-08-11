@@ -3,8 +3,9 @@
 namespace Meritum\Http\Emitter;
 
 use Psr\Http\Message\ResponseInterface;
+use Meritum\Http\Contract\EmitterInterface;
 
-final class SapiEmitter
+final class SapiEmitter implements EmitterInterface
 {
     public function __construct(private int $responseChunkSize = 4096) {}
 
