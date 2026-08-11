@@ -32,6 +32,8 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
      */
     private array $terminatingCallbacks = [];
 
+    private bool $handled = false;
+
     public function __construct(EnvironmentInterface $environment, ?ContainerBuilderInterface $builder = null, bool $debug = false)
     {
         parent::__construct($environment, $builder, $debug);
@@ -84,15 +86,9 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
         KernelException::throwIfNot($this->isBooted(), 'Kernel cannot handle requests because it has not been booted');
 
-        $ownsProfile
-            = null !== $this->profiler
-            && false === $this->profiler->hasProfile('request');
+        $this->handled = false;
 
-        $profile = $ownsProfile
-            ? $this->profiler->initProfile('request')
-            : $this->profiler?->getProfile('request');
-
-        $profile?->startPhase('handle');
+        $profile = $this->profiler?->initProfile('handle');
 
         $handler = $this->getContainer()->get(RequestHandlerInterface::class);
 
@@ -108,11 +104,7 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
             $exceptionHandler = $this->getExceptionHandler();
 
             if (null === $exceptionHandler) {
-                $profile?->stopPhase('handle');
-
-                if ($ownsProfile) {
-                    $profile?->stop();
-                }
+                $profile?->stop();
 
                 throw $e;
             }
@@ -124,20 +116,24 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
             $profile?->stopPhase('exceptionHandling');
         }
 
-        $profile?->stopPhase('handle');
+        $this->handled = true;
 
-        if ($ownsProfile) {
-            $profile?->stop();
-        }
+        $profile?->stop();
 
         return $response;
     }
 
     public function terminate(ServerRequestInterface $request, ResponseInterface $response): void
     {
+        KernelException::throwIfNot($this->handled, 'Cannot terminate an unhandled request');
+
+        $profile = $this->profiler?->initProfile('terminate');
+
         foreach ($this->terminatingCallbacks as $callback) {
             $callback($request, $response, $this);
         }
+
+        $profile?->stop();
     }
 
     public function run(): int
@@ -146,7 +142,7 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
         $this->boot();
 
-        $profile = $this->profiler?->initProfile('request');
+        $profile = $this->profiler?->initProfile('run');
 
         $profile?->startPhase('requestResolution');
 
@@ -164,13 +160,9 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
         $profile?->stopPhase('emission');
 
-        $profile?->startPhase('terminate');
+        $profile?->stop();
 
         $this->terminate($request, $response);
-
-        $profile?->stopPhase('terminate');
-
-        $profile?->stop();
 
         $this->shutdown();
 

@@ -184,13 +184,24 @@ final class HttpKernelTest extends TestCase
         $kernel->handle(new ServerRequest([], [], '/test', 'GET'));
     }
 
+    public function test_terminate_throws_when_request_has_not_been_handled(): void
+    {
+        $kernel = $this->createBootedKernel();
+
+        $this->expectException(KernelException::class);
+
+        $kernel->terminate(new ServerRequest(), new Response('php://temp', 200));
+    }
+
     public function test_terminate_invokes_callbacks_in_order(): void
     {
         $kernel = $this->createKernel();
+        $kernel->addRoute('GET', '/test', $this->createHandler());
         $order  = [];
         $kernel->onTerminating(function () use (&$order) { $order[] = 1; });
         $kernel->onTerminating(function () use (&$order) { $order[] = 2; });
         $kernel->boot();
+        $kernel->handle(new ServerRequest([], [], '/test', 'GET'));
 
         $kernel->terminate(new ServerRequest(), new Response('php://temp', 200));
 
@@ -199,12 +210,14 @@ final class HttpKernelTest extends TestCase
 
     public function test_terminate_passes_request_response_and_kernel_to_callbacks(): void
     {
-        $kernel   = $this->createKernel();
+        $kernel = $this->createKernel();
+        $kernel->addRoute('GET', '/test', $this->createHandler());
         $captured = [];
         $kernel->onTerminating(function ($req, $resp, $k) use (&$captured) {
             $captured = [$req, $resp, $k];
         });
         $kernel->boot();
+        $kernel->handle(new ServerRequest([], [], '/test', 'GET'));
 
         $request  = new ServerRequest();
         $response = new Response('php://temp', 200);
@@ -218,6 +231,7 @@ final class HttpKernelTest extends TestCase
     public function test_terminate_does_not_shut_down_kernel(): void
     {
         $kernel = $this->createBootedKernel();
+        $kernel->handle(new ServerRequest([], [], '/test', 'GET'));
 
         $kernel->terminate(new ServerRequest(), new Response('php://temp', 200));
 
@@ -279,5 +293,48 @@ final class HttpKernelTest extends TestCase
         $this->expectException(KernelException::class);
 
         $kernel->run();
+    }
+
+    public function test_handle_registers_its_own_debug_profile(): void
+    {
+        $kernel = new HttpKernel(new TestingEnvironment(), debug: true);
+        $kernel->addRoute('GET', '/test', $this->createHandler());
+        $kernel->boot();
+
+        $kernel->handle(new ServerRequest([], [], '/test', 'GET'));
+
+        $this->assertArrayHasKey('handle', $kernel->getDebugInfo()['profiles']);
+    }
+
+    public function test_terminate_registers_its_own_debug_profile_when_called_outside_run(): void
+    {
+        $kernel = new HttpKernel(new TestingEnvironment(), debug: true);
+        $kernel->addRoute('GET', '/test', $this->createHandler());
+        $kernel->boot();
+        $kernel->handle(new ServerRequest([], [], '/test', 'GET'));
+
+        $kernel->terminate(new ServerRequest(), new Response('php://temp', 200));
+
+        $this->assertArrayHasKey('terminate', $kernel->getDebugInfo()['profiles']);
+    }
+
+    public function test_run_registers_separate_debug_profiles_for_each_lifecycle_stage(): void
+    {
+        $kernel = new HttpKernel(new TestingEnvironment(), debug: true);
+        $kernel->addRoute('GET', '/test', $this->createHandler());
+        $kernel->override(ServerRequestInterface::class, fn() => new ServerRequest([], [], '/test', 'GET'))->share();
+        $kernel->override(EmitterInterface::class, fn() => new class implements EmitterInterface {
+            public function emit(ResponseInterface $response): void {}
+        })->share();
+
+        $kernel->run();
+
+        $profiles = $kernel->getDebugInfo()['profiles'];
+
+        $this->assertArrayHasKey('boot', $profiles);
+        $this->assertArrayHasKey('run', $profiles);
+        $this->assertArrayHasKey('handle', $profiles);
+        $this->assertArrayHasKey('terminate', $profiles);
+        $this->assertArrayHasKey('shutdown', $profiles);
     }
 }
