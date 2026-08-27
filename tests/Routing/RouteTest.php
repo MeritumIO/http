@@ -9,6 +9,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Georgeff\Kernel\Contract\DebuggableInterface;
 
 final class RouteTest extends TestCase
 {
@@ -193,5 +194,52 @@ final class RouteTest extends TestCase
         $route = new Route(['GET'], '/path', $this->handler);
 
         $this->assertInstanceOf(RouteInterface::class, $route);
+    }
+
+    public function test_implements_debuggable_interface(): void
+    {
+        $route = new Route(['GET'], '/path', $this->handler);
+
+        $this->assertInstanceOf(DebuggableInterface::class, $route);
+    }
+
+    public function test_get_debug_info_contains_methods_path_and_handler(): void
+    {
+        $route = new Route(['GET', 'POST'], '/path', $this->handler);
+
+        $debugInfo = $route->getDebugInfo();
+
+        $this->assertSame(['GET', 'POST'], $debugInfo['methods']);
+        $this->assertSame('/path', $debugInfo['path']);
+        $this->assertSame($this->handler::class, $debugInfo['handler']);
+    }
+
+    public function test_get_debug_info_returns_string_handler_unchanged(): void
+    {
+        $route = new Route(['GET'], '/path', 'SomeHandler');
+
+        $this->assertSame('SomeHandler', $route->getDebugInfo()['handler']);
+    }
+
+    public function test_get_debug_info_contains_arguments(): void
+    {
+        $route = (new Route(['GET'], '/users/{id}', $this->handler))->withArguments(['id' => '42']);
+
+        $this->assertSame(['id' => '42'], $route->getDebugInfo()['arguments']);
+    }
+
+    public function test_get_debug_info_contains_middleware_debug_info(): void
+    {
+        $middleware = new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+
+        $route = new Route(['GET'], '/path', $this->handler);
+        $route->addMiddleware($middleware);
+
+        $this->assertSame([$middleware::class], $route->getDebugInfo()['middleware']);
     }
 }

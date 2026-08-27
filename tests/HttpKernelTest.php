@@ -337,4 +337,25 @@ final class HttpKernelTest extends TestCase
         $this->assertArrayHasKey('terminate', $profiles);
         $this->assertArrayHasKey('shutdown', $profiles);
     }
+
+    public function test_debug_info_includes_registered_routes(): void
+    {
+        $kernel = new HttpKernel(new TestingEnvironment(), debug: true);
+        $kernel->addRoute('GET', '/test', $this->createHandler());
+        $kernel->boot();
+
+        $routes = $kernel->getDebugInfo()['components']['routes'];
+
+        $this->assertCount(1, $routes);
+        $this->assertSame('/test', $routes[0]['path']);
+    }
+
+    public function test_debug_info_includes_registered_middleware(): void
+    {
+        $kernel = new HttpKernel(new TestingEnvironment(), debug: true);
+        $kernel->addMiddleware('SomeMiddleware');
+        $kernel->boot();
+
+        $this->assertSame(['SomeMiddleware'], $kernel->getDebugInfo()['components']['middleware']);
+    }
 }

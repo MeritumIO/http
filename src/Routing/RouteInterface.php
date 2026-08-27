@@ -4,8 +4,9 @@ namespace Meritum\Http\Routing;
 
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Georgeff\Kernel\Contract\DebuggableInterface;
 
-interface RouteInterface
+interface RouteInterface extends DebuggableInterface
 {
     /**
      * @return non-empty-list<string>

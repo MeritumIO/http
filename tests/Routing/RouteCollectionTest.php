@@ -8,6 +8,7 @@ use Meritum\Http\Routing\RouteInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Georgeff\Kernel\Contract\DebuggableInterface;
 
 final class RouteCollectionTest extends TestCase
 {
@@ -100,5 +101,32 @@ final class RouteCollectionTest extends TestCase
         $collection->add(['PUT'], '/c', $this->handler);
 
         $this->assertCount(3, iterator_to_array($collection));
+    }
+
+    public function test_implements_debuggable_interface(): void
+    {
+        $this->assertInstanceOf(DebuggableInterface::class, new RouteCollection());
+    }
+
+    public function test_get_debug_info_is_empty_by_default(): void
+    {
+        $this->assertSame([], (new RouteCollection())->getDebugInfo());
+    }
+
+    public function test_get_debug_info_contains_each_routes_debug_info(): void
+    {
+        $collection = new RouteCollection();
+        $route      = $collection->add(['GET'], '/path', $this->handler);
+
+        $this->assertSame([$route->getDebugInfo()], $collection->getDebugInfo());
+    }
+
+    public function test_get_debug_info_preserves_insertion_order(): void
+    {
+        $collection = new RouteCollection();
+        $first      = $collection->add(['GET'], '/first', $this->handler);
+        $second     = $collection->add(['POST'], '/second', $this->handler);
+
+        $this->assertSame([$first->getDebugInfo(), $second->getDebugInfo()], $collection->getDebugInfo());
     }
 }

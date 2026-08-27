@@ -42,6 +42,9 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
         $this->middleware = new MiddlewareStack();
 
         $this->configure();
+
+        $this->profiler?->register($this->middleware, 'middleware');
+        $this->profiler?->register($this->routes, 'routes');
     }
 
     private function configure(): void

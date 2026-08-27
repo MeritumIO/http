@@ -49,6 +49,17 @@ final class Route implements RouteInterface
         $this->middleware = clone $this->middleware;
     }
 
+    public function getDebugInfo(): array
+    {
+        return [
+            'methods'    => $this->methods,
+            'path'       => $this->path,
+            'handler'    => is_string($this->handler) ? $this->handler : $this->handler::class,
+            'arguments'  => $this->arguments,
+            'middleware' => $this->middleware->getDebugInfo(),
+        ];
+    }
+
     public function getMethods(): array
     {
         return $this->methods;
