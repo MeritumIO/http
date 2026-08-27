@@ -109,6 +109,13 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
         return $this;
     }
 
+    public function addExceptionHandler(callable $factory): static
+    {
+        $this->define(ExceptionHandlerInterface::class, $factory)->share();
+
+        return $this;
+    }
+
     public function onTerminating(callable $callback): static
     {
         KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot add terminating callbacks');

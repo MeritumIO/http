@@ -14,6 +14,7 @@ use Meritum\Http\HttpKernelInterface;
 use Meritum\Http\Routing\RouteInterface;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
@@ -168,6 +169,86 @@ final class HttpKernelTest extends TestCase
         $this->expectException(KernelException::class);
 
         $kernel->addMiddleware('SomeMiddleware');
+    }
+
+    public function test_add_exception_handler_returns_static(): void
+    {
+        $kernel = $this->createKernel();
+
+        $handler = $kernel->addExceptionHandler(fn() => new class implements ExceptionHandlerInterface {
+            public function handle(Throwable $e, ServerRequestInterface $request): ResponseInterface
+            {
+                return new Response('php://temp', 500);
+            }
+        });
+
+        $this->assertSame($kernel, $handler);
+    }
+
+    public function test_add_exception_handler_throws_after_boot(): void
+    {
+        $kernel = $this->createBootedKernel();
+
+        $this->expectException(KernelException::class);
+
+        $kernel->addExceptionHandler(fn() => new class implements ExceptionHandlerInterface {
+            public function handle(Throwable $e, ServerRequestInterface $request): ResponseInterface
+            {
+                return new Response('php://temp', 500);
+            }
+        });
+    }
+
+    public function test_add_exception_handler_registers_handler_used_by_handle(): void
+    {
+        $kernel = $this->createKernel();
+        $kernel->addRoute('GET', '/test', new class implements RequestHandlerInterface {
+            public function handle(ServerRequestInterface $request): ResponseInterface
+            {
+                throw new \RuntimeException('Handler error');
+            }
+        });
+        $kernel->addExceptionHandler(fn() => new class implements ExceptionHandlerInterface {
+            public function handle(Throwable $e, ServerRequestInterface $request): ResponseInterface
+            {
+                return new Response('php://temp', 500);
+            }
+        });
+        $kernel->boot();
+
+        $response = $kernel->handle(new ServerRequest([], [], '/test', 'GET'));
+
+        $this->assertSame(500, $response->getStatusCode());
+    }
+
+    public function test_add_exception_handler_factory_can_resolve_dependencies_from_container(): void
+    {
+        $kernel = $this->createKernel();
+        $kernel->addRoute('GET', '/test', new class implements RequestHandlerInterface {
+            public function handle(ServerRequestInterface $request): ResponseInterface
+            {
+                throw new \RuntimeException('Handler error');
+            }
+        });
+        $kernel->define('exception.status', fn() => 503)->share();
+
+        $kernel->addExceptionHandler(function (ContainerInterface $container) {
+            $status = $container->get('exception.status');
+
+            return new class($status) implements ExceptionHandlerInterface {
+                public function __construct(private readonly int $status) {}
+
+                public function handle(Throwable $e, ServerRequestInterface $request): ResponseInterface
+                {
+                    return new Response('php://temp', $this->status);
+                }
+            };
+        });
+        $kernel->boot();
+
+        $response = $kernel->handle(new ServerRequest([], [], '/test', 'GET'));
+
+        $this->assertSame(503, $response->getStatusCode());
     }
 
     public function test_on_terminating_returns_static(): void
