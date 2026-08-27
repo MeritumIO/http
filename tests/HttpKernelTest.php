@@ -13,6 +13,7 @@ use Meritum\Http\HttpKernel;
 use Meritum\Http\HttpKernelInterface;
 use Meritum\Http\Routing\RouteInterface;
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
@@ -105,6 +106,52 @@ final class HttpKernelTest extends TestCase
         $this->expectException(KernelException::class);
 
         $kernel->addRoute('GET', '/new', $this->createHandler());
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function httpVerbMethodProvider(): array
+    {
+        return [
+            'get'     => ['get', 'GET'],
+            'post'    => ['post', 'POST'],
+            'put'     => ['put', 'PUT'],
+            'patch'   => ['patch', 'PATCH'],
+            'delete'  => ['delete', 'DELETE'],
+            'options' => ['options', 'OPTIONS'],
+            'head'    => ['head', 'HEAD'],
+        ];
+    }
+
+    #[DataProvider('httpVerbMethodProvider')]
+    public function test_verb_method_returns_route_interface_for_matching_method(string $verbMethod, string $expectedHttpMethod): void
+    {
+        $route = $this->createKernel()->{$verbMethod}('/path', $this->createHandler());
+
+        $this->assertInstanceOf(RouteInterface::class, $route);
+        $this->assertSame([$expectedHttpMethod], $route->getMethods());
+    }
+
+    #[DataProvider('httpVerbMethodProvider')]
+    public function test_verb_method_dispatches_request_with_matching_method(string $verbMethod, string $expectedHttpMethod): void
+    {
+        $kernel = $this->createKernel();
+        $kernel->{$verbMethod}('/path', $this->createHandler());
+        $kernel->boot();
+
+        $response = $kernel->handle(new ServerRequest([], [], '/path', $expectedHttpMethod));
+
+        $this->assertSame(200, $response->getStatusCode());
+    }
+
+    public function test_verb_method_throws_after_boot(): void
+    {
+        $kernel = $this->createBootedKernel();
+
+        $this->expectException(KernelException::class);
+
+        $kernel->get('/new', $this->createHandler());
     }
 
     public function test_add_middleware_returns_static(): void

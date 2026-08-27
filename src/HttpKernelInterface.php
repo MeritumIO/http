@@ -17,6 +17,20 @@ interface HttpKernelInterface extends RunnableKernelInterface, RequestHandlerInt
      */
     public function addRoute(array|string $methods, string $uri, RequestHandlerInterface|string $handler): RouteInterface;
 
+    public function get(string $uri, RequestHandlerInterface|string $handler): RouteInterface;
+
+    public function post(string $uri, RequestHandlerInterface|string $handler): RouteInterface;
+
+    public function put(string $uri, RequestHandlerInterface|string $handler): RouteInterface;
+
+    public function patch(string $uri, RequestHandlerInterface|string $handler): RouteInterface;
+
+    public function delete(string $uri, RequestHandlerInterface|string $handler): RouteInterface;
+
+    public function options(string $uri, RequestHandlerInterface|string $handler): RouteInterface;
+
+    public function head(string $uri, RequestHandlerInterface|string $handler): RouteInterface;
+
     /**
      * Add a middleware to the global stack
      */

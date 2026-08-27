@@ -65,6 +65,41 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
         return $this->routes->add($methods, $uri, $handler);
     }
 
+    public function get(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['GET'], $uri, $handler);
+    }
+
+    public function post(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['POST'], $uri, $handler);
+    }
+
+    public function put(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['PUT'], $uri, $handler);
+    }
+
+    public function patch(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['PATCH'], $uri, $handler);
+    }
+
+    public function delete(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['DELETE'], $uri, $handler);
+    }
+
+    public function options(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['OPTIONS'], $uri, $handler);
+    }
+
+    public function head(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['HEAD'], $uri, $handler);
+    }
+
     public function addMiddleware(MiddlewareInterface|string $middleware): static
     {
         KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot add middleware to the global stack');
