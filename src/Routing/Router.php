@@ -9,6 +9,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Meritum\Http\Exception\RoutingException;
 use Meritum\Http\Middleware\MiddlewareResolver;
 use Meritum\Http\Exception\NotFoundHttpException;
 use Meritum\Http\Middleware\RequestHandlerMiddleware;
@@ -82,20 +83,26 @@ final class Router implements RequestHandlerInterface
     {
         $handler = $route->getHandler();
 
-        $handler = is_string($handler) ? $this->container->get($handler) : $handler;
+        try {
+            $handler = is_string($handler) ? $this->container->get($handler) : $handler;
+        } catch (\Throwable $e) {
+            RoutingException::throw($e->getMessage(), $e);
+        }
 
-        if (!$handler instanceof RequestHandlerInterface) {
-            throw new \RuntimeException(sprintf(
+        RoutingException::throwIfNot(
+            $handler instanceof RequestHandlerInterface,
+            sprintf(
                 'Invalid route handler [%s], route handler must implement %s',
                 get_debug_type($handler),
                 RequestHandlerInterface::class
-            ));
-        }
+            )
+        );
+
+        /** @var RequestHandlerInterface $handler */
 
         $route = $route->withArguments($arguments);
 
-        $request = $request->withAttribute('__route__', $route)
-                           ->withAttribute(RouteInterface::class, $route);
+        $request = $request->withAttribute(RouteInterface::class, $route);
 
         $stack = [...$this->middleware, ...$route->getMiddleware(), new RequestHandlerMiddleware($handler)];
 

@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use Meritum\Http\Routing\Route;
 use Meritum\Http\Routing\Router;
 use Meritum\Http\Routing\RouteInterface;
+use Meritum\Http\Exception\RoutingException;
 use Meritum\Http\Exception\NotFoundHttpException;
 use Meritum\Http\Exception\MethodNotAllowedHttpException;
 use Laminas\Diactoros\Response;
@@ -157,29 +158,6 @@ final class RouterTest extends TestCase
         $this->assertSame('42', $capturedRoute->getArgument('id'));
     }
 
-    public function test_route_is_set_on_legacy_attribute_key(): void
-    {
-        $capturedRoute = null;
-        $handler       = new class($capturedRoute) implements RequestHandlerInterface {
-            public function __construct(private mixed &$capturedRoute) {}
-
-            public function handle(ServerRequestInterface $request): ResponseInterface
-            {
-                $this->capturedRoute = $request->getAttribute('__route__');
-
-                return new Response();
-            }
-        };
-
-        $route      = new Route(['GET'], '/users/{id}', $handler);
-        $dispatcher = $this->dispatcher([[['GET'], '/users/{id}', $route]]);
-        $router     = new Router([], $dispatcher, $this->container());
-
-        $router->handle(new ServerRequest([], [], '/users/42', 'GET'));
-
-        $this->assertInstanceOf(RouteInterface::class, $capturedRoute);
-    }
-
     public function test_resolves_string_handler_from_container(): void
     {
         $response = $this->response();
@@ -200,16 +178,44 @@ final class RouterTest extends TestCase
         $this->assertSame($response, $router->handle($request));
     }
 
-    public function test_throws_runtime_exception_for_invalid_handler(): void
+    public function test_throws_routing_exception_for_invalid_handler(): void
     {
         $route      = new Route(['GET'], '/path', 'bad.handler');
         $dispatcher = $this->dispatcher([[['GET'], '/path', $route]]);
         $router     = new Router([], $dispatcher, $this->container(['bad.handler' => new \stdClass()]));
         $request    = new ServerRequest([], [], '/path', 'GET');
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RoutingException::class);
 
         $router->handle($request);
+    }
+
+    public function test_throws_routing_exception_when_handler_service_not_found(): void
+    {
+        $route      = new Route(['GET'], '/path', 'missing.handler');
+        $dispatcher = $this->dispatcher([[['GET'], '/path', $route]]);
+        $router     = new Router([], $dispatcher, $this->container());
+        $request    = new ServerRequest([], [], '/path', 'GET');
+
+        $this->expectException(RoutingException::class);
+
+        $router->handle($request);
+    }
+
+    public function test_routing_exception_preserves_the_container_exception_as_previous(): void
+    {
+        $route      = new Route(['GET'], '/path', 'missing.handler');
+        $dispatcher = $this->dispatcher([[['GET'], '/path', $route]]);
+        $router     = new Router([], $dispatcher, $this->container());
+        $request    = new ServerRequest([], [], '/path', 'GET');
+
+        try {
+            $router->handle($request);
+            $this->fail('Expected RoutingException');
+        } catch (RoutingException $e) {
+            $this->assertInstanceOf(\RuntimeException::class, $e->getPrevious());
+            $this->assertSame('Not found: missing.handler', $e->getPrevious()?->getMessage());
+        }
     }
 
     public function test_global_middleware_is_executed(): void
