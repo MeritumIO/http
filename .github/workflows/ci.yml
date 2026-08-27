@@ -22,3 +22,11 @@ jobs:
       - run: nix develop .#${{ matrix.php }} --command composer test
 
       - run: nix develop .#${{ matrix.php }} --command composer analyze
+
+      - name: Upload coverage to Coveralls
+        if: matrix.php == 'php84'
+        env:
+          COVERALLS_REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          nix develop .#php84 --command composer coverage
+          nix develop .#php84 --command vendor/bin/php-coveralls --coverage_clover=coverage/clover.xml --json_path=coverage/coveralls-upload.json -v
