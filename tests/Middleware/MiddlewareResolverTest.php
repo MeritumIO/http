@@ -4,6 +4,7 @@ namespace Meritum\Http\Test\Middleware;
 
 use PHPUnit\Framework\TestCase;
 use Meritum\Http\Middleware\MiddlewareResolver;
+use Meritum\Http\Exception\MiddlewareStackException;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -67,7 +68,7 @@ final class MiddlewareResolverTest extends TestCase
             'not.middleware' => new \stdClass(),
         ]));
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(MiddlewareStackException::class);
         $this->expectExceptionMessage('not.middleware');
 
         $resolver('not.middleware');

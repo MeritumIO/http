@@ -183,6 +183,10 @@ final class UnprocessableEntityException extends HttpException
 
 `RoutingException` is thrown when a matched route can't actually be dispatched — a string handler that isn't resolvable from the container, or a resolved handler that doesn't implement `RequestHandlerInterface`. Unlike the exceptions above, it does **not** implement `HttpExceptionInterface`: it signals a bug in your route configuration rather than something the client did, so there's no meaningful status code or title to expose. It still reaches your registered exception handler like any other `Throwable`, and preserves the original failure (e.g. a container "not found" error) via `getPrevious()`.
 
+### Middleware exceptions
+
+`MiddlewareStackException` is thrown when a middleware registered by container service ID resolves to something that doesn't implement `MiddlewareInterface`. Like `RoutingException`, it does **not** implement `HttpExceptionInterface` — it signals a misconfigured middleware entry rather than something the client did, and it still reaches your registered exception handler like any other `Throwable`.
+
 ## Response emission
 
 Responses are emitted through `EmitterInterface`, resolved from the container in `run()`. The default implementation, `SapiEmitter`, writes headers and body via `header()`/`echo`. Swap it for a custom implementation before boot — useful for non-SAPI runtimes (Swoole, RoadRunner workers) or tests that want to capture the response instead of emitting it:
