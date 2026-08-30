@@ -4,7 +4,10 @@ namespace Meritum\Http\Test\Routing;
 
 use PHPUnit\Framework\TestCase;
 use Meritum\Http\Routing\Route;
+use Meritum\Http\Routing\RouteGroup;
 use Meritum\Http\Routing\RouteInterface;
+use Meritum\Http\Routing\RouteGroupInterface;
+use Meritum\Http\Routing\RouteRegistrationInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -23,6 +26,67 @@ final class RouteTest extends TestCase
                 throw new \LogicException('Should not be called');
             }
         };
+    }
+
+    private function registrar(): RouteRegistrationInterface
+    {
+        return new class implements RouteRegistrationInterface {
+            public function group(string $prefix, callable $callback): RouteGroupInterface
+            {
+                throw new \LogicException('Should not be called');
+            }
+
+            public function addRoute(array|string $methods, string $uri, RequestHandlerInterface|string $handler): RouteInterface
+            {
+                throw new \LogicException('Should not be called');
+            }
+
+            public function get(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+            {
+                throw new \LogicException('Should not be called');
+            }
+
+            public function post(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+            {
+                throw new \LogicException('Should not be called');
+            }
+
+            public function put(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+            {
+                throw new \LogicException('Should not be called');
+            }
+
+            public function patch(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+            {
+                throw new \LogicException('Should not be called');
+            }
+
+            public function delete(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+            {
+                throw new \LogicException('Should not be called');
+            }
+
+            public function options(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+            {
+                throw new \LogicException('Should not be called');
+            }
+
+            public function head(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+            {
+                throw new \LogicException('Should not be called');
+            }
+        };
+    }
+
+    private function createGroup(?MiddlewareInterface $middleware = null): RouteGroup
+    {
+        $group = new RouteGroup('/group', function () {}, $this->registrar());
+
+        if (null !== $middleware) {
+            $group->addMiddleware($middleware);
+        }
+
+        return $group;
     }
 
     public function test_methods_are_uppercased(): void
@@ -241,5 +305,103 @@ final class RouteTest extends TestCase
         $route->addMiddleware($middleware);
 
         $this->assertSame([$middleware::class], $route->getDebugInfo()['middleware']);
+    }
+
+    public function test_has_middleware_is_true_when_only_group_has_middleware(): void
+    {
+        $middleware = new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+
+        $route = new Route(['GET'], '/path', $this->handler, [$this->createGroup($middleware)]);
+
+        $this->assertTrue($route->hasMiddleware());
+    }
+
+    public function test_has_middleware_is_false_when_neither_route_nor_groups_have_middleware(): void
+    {
+        $route = new Route(['GET'], '/path', $this->handler, [$this->createGroup()]);
+
+        $this->assertFalse($route->hasMiddleware());
+    }
+
+    public function test_get_middleware_includes_group_middleware(): void
+    {
+        $groupMiddleware = new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+
+        $route = new Route(['GET'], '/path', $this->handler, [$this->createGroup($groupMiddleware)]);
+
+        $this->assertSame([$groupMiddleware], iterator_to_array($route->getMiddleware()));
+    }
+
+    public function test_get_middleware_places_group_middleware_before_route_middleware(): void
+    {
+        $groupMiddleware = new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+        $routeMiddleware = new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+
+        $route = new Route(['GET'], '/path', $this->handler, [$this->createGroup($groupMiddleware)]);
+        $route->addMiddleware($routeMiddleware);
+
+        $this->assertSame([$groupMiddleware, $routeMiddleware], iterator_to_array($route->getMiddleware()));
+    }
+
+    public function test_get_middleware_places_outer_group_middleware_before_inner_group_middleware(): void
+    {
+        $outerMiddleware = new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+        $innerMiddleware = new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+
+        // RouteCollection::$activeGroups accumulates outermost-first, so that's the order Route receives them in
+        $route = new Route(['GET'], '/path', $this->handler, [
+            $this->createGroup($outerMiddleware),
+            $this->createGroup($innerMiddleware),
+        ]);
+
+        $this->assertSame([$outerMiddleware, $innerMiddleware], iterator_to_array($route->getMiddleware()));
+    }
+
+    public function test_get_middleware_is_idempotent(): void
+    {
+        $groupMiddleware = new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+
+        $route = new Route(['GET'], '/path', $this->handler, [$this->createGroup($groupMiddleware)]);
+
+        $first  = iterator_to_array($route->getMiddleware());
+        $second = iterator_to_array($route->getMiddleware());
+
+        $this->assertSame([$groupMiddleware], $first);
+        $this->assertSame([$groupMiddleware], $second);
     }
 }

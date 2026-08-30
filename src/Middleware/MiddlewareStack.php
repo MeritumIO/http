@@ -31,9 +31,18 @@ final class MiddlewareStack implements IteratorAggregate, DebuggableInterface
         return $data;
     }
 
-    public function add(MiddlewareInterface|string $middleware): static
+    public function add(MiddlewareInterface|string $middleware): self
     {
         $this->middleware[] = $middleware;
+
+        return $this;
+    }
+
+    public function merge(MiddlewareStack $stack, bool $prepend = false): self
+    {
+        $this->middleware = $prepend
+            ? array_merge($stack->getMiddleware(), $this->middleware)
+            : array_merge($this->middleware, $stack->getMiddleware());
 
         return $this;
     }
@@ -46,5 +55,13 @@ final class MiddlewareStack implements IteratorAggregate, DebuggableInterface
     public function getIterator(): Traversable
     {
         return new ArrayIterator($this->middleware);
+    }
+
+    /**
+     * @return array<int, MiddlewareInterface|string>
+     */
+    public function getMiddleware(): array
+    {
+        return $this->middleware;
     }
 }

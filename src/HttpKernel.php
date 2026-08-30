@@ -20,6 +20,7 @@ use Georgeff\Kernel\Exception\KernelException;
 use Georgeff\Kernel\Contract\EnvironmentInterface;
 use Meritum\Http\Contract\ExceptionHandlerInterface;
 use Georgeff\Kernel\Contract\ContainerBuilderInterface;
+use Meritum\Http\Routing\RouteGroupInterface;
 
 final class HttpKernel extends Kernel implements HttpKernelInterface
 {
@@ -54,6 +55,13 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
             $this->define(RequestHandlerInterface::class, new RouterFactory($this->middleware, $this->routes))->share();
             $this->define(ServerRequestInterface::class, fn() => ServerRequestFactory::fromGlobals())->share();
         });
+    }
+
+    public function group(string $prefix, callable $callback): RouteGroupInterface
+    {
+        KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot add new route groups');
+
+        return $this->routes->group($prefix, $callback);
     }
 
     public function addRoute(array|string $methods, string $uri, RequestHandlerInterface|string $handler): RouteInterface

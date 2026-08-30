@@ -12,11 +12,13 @@ use Meritum\Http\Contract\ExceptionHandlerInterface;
 use Meritum\Http\HttpKernel;
 use Meritum\Http\HttpKernelInterface;
 use Meritum\Http\Routing\RouteInterface;
+use Meritum\Http\Routing\RouteGroupInterface;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 final class HttpKernelTest extends TestCase
@@ -153,6 +155,111 @@ final class HttpKernelTest extends TestCase
         $this->expectException(KernelException::class);
 
         $kernel->get('/new', $this->createHandler());
+    }
+
+    public function test_group_returns_route_group_interface(): void
+    {
+        $group = $this->createKernel()->group('/api', function () {});
+
+        $this->assertInstanceOf(RouteGroupInterface::class, $group);
+    }
+
+    public function test_group_throws_after_boot(): void
+    {
+        $kernel = $this->createBootedKernel();
+
+        $this->expectException(KernelException::class);
+
+        $kernel->group('/api', function () {});
+    }
+
+    public function test_group_registers_prefixed_dispatchable_routes(): void
+    {
+        $kernel = $this->createKernel();
+        $kernel->group('/api', function ($api) {
+            $api->get('/users', $this->createHandler());
+        });
+        $kernel->boot();
+
+        $response = $kernel->handle(new ServerRequest([], [], '/api/users', 'GET'));
+
+        $this->assertSame(200, $response->getStatusCode());
+    }
+
+    public function test_nested_group_registers_dispatchable_route(): void
+    {
+        $kernel = $this->createKernel();
+        $kernel->group('/api', function ($api) {
+            $api->group('/v1', function ($v1) {
+                $v1->get('/users', $this->createHandler());
+            });
+        });
+        $kernel->boot();
+
+        $response = $kernel->handle(new ServerRequest([], [], '/api/v1/users', 'GET'));
+
+        $this->assertSame(200, $response->getStatusCode());
+    }
+
+    public function test_global_group_and_route_middleware_execute_in_order(): void
+    {
+        $order = [];
+
+        $globalMiddleware = new class($order) implements MiddlewareInterface {
+            public function __construct(private array &$order) {}
+
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                $this->order[] = 'global';
+
+                return $handler->handle($request);
+            }
+        };
+
+        $groupMiddleware = new class($order) implements MiddlewareInterface {
+            public function __construct(private array &$order) {}
+
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                $this->order[] = 'group';
+
+                return $handler->handle($request);
+            }
+        };
+
+        $routeMiddleware = new class($order) implements MiddlewareInterface {
+            public function __construct(private array &$order) {}
+
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                $this->order[] = 'route';
+
+                return $handler->handle($request);
+            }
+        };
+
+        $handler = new class($order) implements RequestHandlerInterface {
+            public function __construct(private array &$order) {}
+
+            public function handle(ServerRequestInterface $request): ResponseInterface
+            {
+                $this->order[] = 'handler';
+
+                return new Response('php://temp', 200);
+            }
+        };
+
+        $kernel = $this->createKernel();
+        $kernel->addMiddleware($globalMiddleware);
+
+        $kernel->group('/api', function ($api) use ($handler, $routeMiddleware) {
+            $api->get('/users', $handler)->addMiddleware($routeMiddleware);
+        })->addMiddleware($groupMiddleware);
+
+        $kernel->boot();
+        $kernel->handle(new ServerRequest([], [], '/api/users', 'GET'));
+
+        $this->assertSame(['global', 'group', 'route', 'handler'], $order);
     }
 
     public function test_add_middleware_returns_static(): void

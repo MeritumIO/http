@@ -27,11 +27,13 @@ final class Route implements RouteInterface
 
     /**
      * @param non-empty-list<string> $methods
+     * @param RouteGroup[]           $groups
      */
     public function __construct(
         array $methods,
         string $path,
-        private readonly RequestHandlerInterface|string $handler
+        private readonly RequestHandlerInterface|string $handler,
+        private readonly array $groups = []
     ) {
         $this->methods = array_map('strtoupper', $methods);
 
@@ -103,11 +105,27 @@ final class Route implements RouteInterface
 
     public function hasMiddleware(): bool
     {
-        return false === $this->middleware->isEmpty();
+        if (false === $this->middleware->isEmpty()) {
+            return true;
+        }
+
+        foreach ($this->groups as $group) {
+            if (false === $group->getMiddlewareStack()->isEmpty()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function getMiddleware(): iterable
     {
-        return $this->middleware;
+        $middleware = clone $this->middleware;
+
+        foreach (array_reverse($this->groups) as $group) {
+            $middleware->merge($group->getMiddlewareStack(), true);
+        }
+
+        return $middleware;
     }
 }

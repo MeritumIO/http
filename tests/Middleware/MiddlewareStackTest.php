@@ -137,4 +137,59 @@ final class MiddlewareStackTest extends TestCase
 
         $this->assertSame([$this->middleware::class, 'SomeMiddleware'], $stack->getDebugInfo());
     }
+
+    public function test_get_middleware_returns_raw_array(): void
+    {
+        $stack = new MiddlewareStack();
+        $stack->add($this->middleware);
+        $stack->add('SomeMiddleware');
+
+        $this->assertSame([$this->middleware, 'SomeMiddleware'], $stack->getMiddleware());
+    }
+
+    public function test_merge_appends_by_default(): void
+    {
+        $stack = new MiddlewareStack();
+        $stack->add($this->middleware);
+
+        $other = new MiddlewareStack();
+        $other->add('SomeMiddleware');
+
+        $stack->merge($other);
+
+        $this->assertSame([$this->middleware, 'SomeMiddleware'], $stack->getMiddleware());
+    }
+
+    public function test_merge_prepends_when_requested(): void
+    {
+        $stack = new MiddlewareStack();
+        $stack->add($this->middleware);
+
+        $other = new MiddlewareStack();
+        $other->add('SomeMiddleware');
+
+        $stack->merge($other, true);
+
+        $this->assertSame(['SomeMiddleware', $this->middleware], $stack->getMiddleware());
+    }
+
+    public function test_merge_returns_same_instance(): void
+    {
+        $stack = new MiddlewareStack();
+
+        $this->assertSame($stack, $stack->merge(new MiddlewareStack()));
+    }
+
+    public function test_merge_does_not_mutate_the_argument_stack(): void
+    {
+        $stack = new MiddlewareStack();
+        $stack->add($this->middleware);
+
+        $other = new MiddlewareStack();
+        $other->add('SomeMiddleware');
+
+        $stack->merge($other);
+
+        $this->assertSame(['SomeMiddleware'], $other->getMiddleware());
+    }
 }

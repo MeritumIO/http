@@ -21,11 +21,31 @@ final class RouteCollection implements IteratorAggregate, DebuggableInterface
     private array $routes = [];
 
     /**
+     * @var RouteGroup[]
+     */
+    private array $activeGroups = [];
+
+    public function group(string $prefix, callable $callback): RouteGroupInterface
+    {
+        $group = new RouteGroup($prefix, $callback, new GroupRouteRegister($this, $prefix));
+
+        $this->activeGroups[] = $group;
+
+        try {
+            $group->invokeCallback();
+        } finally {
+            array_pop($this->activeGroups);
+        }
+
+        return $group;
+    }
+
+    /**
      * @param non-empty-list<string> $methods
      */
     public function add(array $methods, string $path, RequestHandlerInterface|string $handler): RouteInterface
     {
-        return $this->routes[] = new Route($methods, $path, $handler);
+        return $this->routes[] = new Route($methods, $path, $handler, $this->activeGroups);
     }
 
     public function isEmpty(): bool

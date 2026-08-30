@@ -5,8 +5,10 @@ namespace Meritum\Http\Test\Routing;
 use PHPUnit\Framework\TestCase;
 use Meritum\Http\Routing\RouteCollection;
 use Meritum\Http\Routing\RouteInterface;
+use Meritum\Http\Routing\RouteGroupInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Georgeff\Kernel\Contract\DebuggableInterface;
 
@@ -128,5 +130,158 @@ final class RouteCollectionTest extends TestCase
         $second     = $collection->add(['POST'], '/second', $this->handler);
 
         $this->assertSame([$first->getDebugInfo(), $second->getDebugInfo()], $collection->getDebugInfo());
+    }
+
+    private function middleware(): MiddlewareInterface
+    {
+        return new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+    }
+
+    public function test_group_returns_route_group_interface(): void
+    {
+        $collection = new RouteCollection();
+
+        $group = $collection->group('/api', function () {});
+
+        $this->assertInstanceOf(RouteGroupInterface::class, $group);
+    }
+
+    public function test_group_invokes_the_callback(): void
+    {
+        $collection = new RouteCollection();
+        $invoked    = false;
+
+        $collection->group('/api', function () use (&$invoked) {
+            $invoked = true;
+        });
+
+        $this->assertTrue($invoked);
+    }
+
+    public function test_group_prefixes_routes_registered_in_callback(): void
+    {
+        $collection = new RouteCollection();
+
+        $collection->group('/api', function ($api) {
+            $api->get('/users', $this->handler);
+        });
+
+        $routes = iterator_to_array($collection);
+
+        $this->assertSame('/api/users', $routes[0]->getPath());
+    }
+
+    public function test_nested_groups_compose_prefixes(): void
+    {
+        $collection = new RouteCollection();
+
+        $collection->group('/api', function ($api) {
+            $api->group('/v1', function ($v1) {
+                $v1->get('/users', $this->handler);
+            });
+        });
+
+        $routes = iterator_to_array($collection);
+
+        $this->assertSame('/api/v1/users', $routes[0]->getPath());
+    }
+
+    public function test_route_in_group_inherits_group_middleware(): void
+    {
+        $middleware = $this->middleware();
+        $collection = new RouteCollection();
+
+        $group = $collection->group('/api', function ($api) {
+            $api->get('/users', $this->handler);
+        });
+        $group->addMiddleware($middleware);
+
+        $routes = iterator_to_array($collection);
+
+        $this->assertSame([$middleware], iterator_to_array($routes[0]->getMiddleware()));
+    }
+
+    public function test_route_outside_any_group_has_no_group_middleware(): void
+    {
+        $middleware = $this->middleware();
+        $collection = new RouteCollection();
+
+        $group = $collection->group('/api', function ($api) {
+            $api->get('/users', $this->handler);
+        });
+        $group->addMiddleware($middleware);
+
+        $collection->add(['GET'], '/outside', $this->handler);
+
+        $routes = iterator_to_array($collection);
+
+        $this->assertSame([], iterator_to_array($routes[1]->getMiddleware()));
+    }
+
+    public function test_group_middleware_order_is_outer_then_inner_then_route(): void
+    {
+        $outerMiddleware = $this->middleware();
+        $innerMiddleware = $this->middleware();
+        $routeMiddleware = $this->middleware();
+
+        $collection = new RouteCollection();
+        $route      = null;
+        $innerGroup = null;
+
+        $outerGroup = $collection->group('/api', function ($api) use (&$route, &$innerGroup, $routeMiddleware) {
+            $innerGroup = $api->group('/v1', function ($v1) use (&$route, $routeMiddleware) {
+                $route = $v1->get('/users', $this->handler);
+                $route->addMiddleware($routeMiddleware);
+            });
+        });
+
+        $outerGroup->addMiddleware($outerMiddleware);
+        $innerGroup->addMiddleware($innerMiddleware);
+
+        $this->assertSame(
+            [$outerMiddleware, $innerMiddleware, $routeMiddleware],
+            iterator_to_array($route->getMiddleware())
+        );
+    }
+
+    public function test_get_middleware_on_grouped_route_is_idempotent(): void
+    {
+        $middleware = $this->middleware();
+        $collection = new RouteCollection();
+        $route      = null;
+
+        $group = $collection->group('/api', function ($api) use (&$route) {
+            $route = $api->get('/users', $this->handler);
+        });
+        $group->addMiddleware($middleware);
+
+        $first  = iterator_to_array($route->getMiddleware());
+        $second = iterator_to_array($route->getMiddleware());
+
+        $this->assertSame([$middleware], $first);
+        $this->assertSame([$middleware], $second);
+    }
+
+    public function test_exception_in_group_callback_does_not_leak_active_group_state(): void
+    {
+        $collection = new RouteCollection();
+
+        try {
+            $collection->group('/api', function () {
+                throw new \RuntimeException('boom');
+            });
+            $this->fail('Expected RuntimeException');
+        } catch (\RuntimeException) {
+            // expected
+        }
+
+        $activeGroups = new \ReflectionProperty(RouteCollection::class, 'activeGroups');
+
+        $this->assertSame([], $activeGroups->getValue($collection));
     }
 }
