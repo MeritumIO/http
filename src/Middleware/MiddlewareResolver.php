@@ -14,7 +14,12 @@ final class MiddlewareResolver
     {
         if (is_string($middleware)) {
             $str = $middleware;
-            $middleware = $this->container->get($middleware);
+
+            try {
+                $middleware = $this->container->get($middleware);
+            } catch (\Throwable $e) {
+                MiddlewareStackException::throw($e->getMessage(), $e);
+            }
 
             MiddlewareStackException::throwIfNot(
                 $middleware instanceof MiddlewareInterface,

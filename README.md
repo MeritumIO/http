@@ -218,7 +218,7 @@ final class UnprocessableEntityException extends HttpException
 
 ### Middleware exceptions
 
-`MiddlewareStackException` is thrown when a middleware registered by container service ID resolves to something that doesn't implement `MiddlewareInterface`. Like `RoutingException`, it does **not** implement `HttpExceptionInterface` — it signals a misconfigured middleware entry rather than something the client did, and it still reaches your registered exception handler like any other `Throwable`.
+`MiddlewareStackException` is thrown when a middleware entry registered by container service ID can't actually be resolved — either the container can't find it, or it resolves to something that doesn't implement `MiddlewareInterface`. Like `RoutingException`, it does **not** implement `HttpExceptionInterface` — it signals a misconfigured middleware entry rather than something the client did. It still reaches your registered exception handler like any other `Throwable`, and preserves a container resolution failure via `getPrevious()`.
 
 ## Response emission
 
