@@ -80,6 +80,39 @@ $kernel->get('/admin', AdminHandler::class)
        ->addMiddleware(RateLimitMiddleware::class);
 ```
 
+### Route groups
+
+`group()` registers routes under a shared path prefix. The callback receives a route-registration object with the same `addRoute()`/HTTP-verb methods as the kernel itself:
+
+```php
+$kernel->group('/api', function ($api) {
+    $api->get('/users', ListUsersHandler::class);
+    $api->post('/users', CreateUserHandler::class);
+});
+```
+
+`group()` returns a `RouteGroupInterface`, which is where group-level middleware is attached — via `addMiddleware()` on the return value, after the callback has already registered its routes:
+
+```php
+$kernel->group('/api', function ($api) {
+    $api->get('/users', ListUsersHandler::class);
+})->addMiddleware(ApiAuthMiddleware::class);
+```
+
+This works because group middleware is resolved per request, not at registration time — so it applies to every route the group produced regardless of when `addMiddleware()` was called relative to them.
+
+Groups can be nested; each level's prefix and middleware compose with its parent's:
+
+```php
+$kernel->group('/api', function ($api) {
+    $api->group('/v1', function ($v1) {
+        $v1->get('/users', ListUsersHandler::class); // GET /api/v1/users
+    })->addMiddleware(V1DeprecationMiddleware::class);
+})->addMiddleware(ApiAuthMiddleware::class);
+```
+
+Like `addRoute()`, `group()` must be called before `boot()`.
+
 ## Middleware
 
 ### Global middleware
@@ -96,7 +129,7 @@ Middleware can be a `MiddlewareInterface` instance or a container service ID str
 ### Execution order
 
 ```
-global middleware → route middleware → handler
+global middleware → group middleware (outermost to innermost) → route middleware → handler
 ```
 
 ## Exception handling
@@ -243,6 +276,8 @@ $info = $kernel->getDebugInfo();
 ```
 
 `boot`, `run`, `handle`, `terminate`, and `shutdown` are each tracked as independent profiles under `$info['profiles']` — every one is self-contained and appears whenever that stage actually runs, so `terminate()` still profiles correctly even when called outside `run()`. `$info['components']` includes `routes` and `middleware`, reflecting whatever was registered via `addRoute()`/the HTTP-verb methods and `addMiddleware()`.
+
+Each route's debug info includes a `groups` key — the chain of groups it was registered under, outermost first, each with its own `prefix` and `middleware` — alongside a `middleware` key that's already merged with every enclosing group's, in the order it will actually run.
 
 ## Using modules
 
