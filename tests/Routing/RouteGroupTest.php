@@ -11,6 +11,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Georgeff\Kernel\Contract\DebuggableInterface;
 
 final class RouteGroupTest extends TestCase
 {
@@ -126,5 +127,41 @@ final class RouteGroupTest extends TestCase
         $group = new RouteGroup('/api', function () {}, $this->registrar());
 
         $this->assertSame($group, $group->invokeCallback());
+    }
+
+    public function test_implements_debuggable_interface(): void
+    {
+        $group = new RouteGroup('/api', function () {}, $this->registrar());
+
+        $this->assertInstanceOf(DebuggableInterface::class, $group);
+    }
+
+    public function test_get_debug_info_contains_prefix(): void
+    {
+        $group = new RouteGroup('/api', function () {}, $this->registrar());
+
+        $this->assertSame('/api', $group->getDebugInfo()['prefix']);
+    }
+
+    public function test_get_debug_info_middleware_is_empty_by_default(): void
+    {
+        $group = new RouteGroup('/api', function () {}, $this->registrar());
+
+        $this->assertSame([], $group->getDebugInfo()['middleware']);
+    }
+
+    public function test_get_debug_info_contains_middleware_debug_info(): void
+    {
+        $middleware = new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+
+        $group = new RouteGroup('/api', function () {}, $this->registrar());
+        $group->addMiddleware($middleware);
+
+        $this->assertSame([$middleware::class], $group->getDebugInfo()['middleware']);
     }
 }

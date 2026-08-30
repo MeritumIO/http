@@ -53,13 +53,20 @@ final class Route implements RouteInterface
 
     public function getDebugInfo(): array
     {
-        return [
+        $data = [
             'methods'    => $this->methods,
             'path'       => $this->path,
             'handler'    => is_string($this->handler) ? $this->handler : $this->handler::class,
             'arguments'  => $this->arguments,
-            'middleware' => $this->middleware->getDebugInfo(),
+            'middleware' => $this->mergeGroupMiddleware()->getDebugInfo(),
+            'groups'     => [],
         ];
+
+        foreach ($this->groups as $group) {
+            $data['groups'][] = $group->getDebugInfo();
+        }
+
+        return $data;
     }
 
     public function getMethods(): array
@@ -118,8 +125,12 @@ final class Route implements RouteInterface
         return false;
     }
 
-    public function getMiddleware(): iterable
+    private function mergeGroupMiddleware(): MiddlewareStack
     {
+        if ([] === $this->groups) {
+            return $this->middleware;
+        }
+
         $middleware = clone $this->middleware;
 
         foreach (array_reverse($this->groups) as $group) {
@@ -127,5 +138,10 @@ final class Route implements RouteInterface
         }
 
         return $middleware;
+    }
+
+    public function getMiddleware(): iterable
+    {
+        return $this->mergeGroupMiddleware();
     }
 }

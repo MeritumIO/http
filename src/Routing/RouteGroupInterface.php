@@ -3,8 +3,9 @@
 namespace Meritum\Http\Routing;
 
 use Psr\Http\Server\MiddlewareInterface;
+use Georgeff\Kernel\Contract\DebuggableInterface;
 
-interface RouteGroupInterface
+interface RouteGroupInterface extends DebuggableInterface
 {
     /**
      * Get the group prefix

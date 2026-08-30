@@ -33,6 +33,14 @@ final class RouteGroup implements RouteGroupInterface
         $this->middleware = new MiddlewareStack();
     }
 
+    public function getDebugInfo(): array
+    {
+        return [
+            'prefix'     => $this->getPrefix(),
+            'middleware' => $this->middleware->getDebugInfo(),
+        ];
+    }
+
     public function invokeCallback(): self
     {
         ($this->callback)($this->routes);

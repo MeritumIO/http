@@ -404,4 +404,57 @@ final class RouteTest extends TestCase
         $this->assertSame([$groupMiddleware], $first);
         $this->assertSame([$groupMiddleware], $second);
     }
+
+    public function test_get_debug_info_contains_empty_groups_by_default(): void
+    {
+        $route = new Route(['GET'], '/path', $this->handler);
+
+        $this->assertSame([], $route->getDebugInfo()['groups']);
+    }
+
+    public function test_get_debug_info_contains_group_debug_info(): void
+    {
+        $group = $this->createGroup();
+
+        $route = new Route(['GET'], '/path', $this->handler, [$group]);
+
+        $this->assertSame([$group->getDebugInfo()], $route->getDebugInfo()['groups']);
+    }
+
+    public function test_get_debug_info_preserves_group_order(): void
+    {
+        $outerGroup = $this->createGroup();
+        $innerGroup = $this->createGroup();
+
+        $route = new Route(['GET'], '/path', $this->handler, [$outerGroup, $innerGroup]);
+
+        $this->assertSame(
+            [$outerGroup->getDebugInfo(), $innerGroup->getDebugInfo()],
+            $route->getDebugInfo()['groups']
+        );
+    }
+
+    public function test_get_debug_info_middleware_includes_group_middleware(): void
+    {
+        $groupMiddleware = new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+        $routeMiddleware = new class implements MiddlewareInterface {
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return $handler->handle($request);
+            }
+        };
+
+        $route = new Route(['GET'], '/path', $this->handler, [$this->createGroup($groupMiddleware)]);
+        $route->addMiddleware($routeMiddleware);
+
+        $this->assertSame(
+            [$groupMiddleware::class, $routeMiddleware::class],
+            $route->getDebugInfo()['middleware']
+        );
+    }
 }
