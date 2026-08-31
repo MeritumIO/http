@@ -253,6 +253,61 @@ final class RouteTest extends TestCase
         $this->assertTrue($clone->hasMiddleware());
     }
 
+    public function test_get_id_returns_a_non_empty_string(): void
+    {
+        $route = new Route(['GET'], '/path', $this->handler);
+
+        $this->assertIsString($route->getId());
+        $this->assertNotSame('', $route->getId());
+    }
+
+    public function test_get_id_is_the_same_for_routes_with_the_same_methods_and_path(): void
+    {
+        $first  = new Route(['GET'], '/path', $this->handler);
+        $second = new Route(['GET'], '/path', $this->handler);
+
+        $this->assertSame($first->getId(), $second->getId());
+    }
+
+    public function test_get_id_differs_for_different_paths(): void
+    {
+        $first  = new Route(['GET'], '/path', $this->handler);
+        $second = new Route(['GET'], '/other', $this->handler);
+
+        $this->assertNotSame($first->getId(), $second->getId());
+    }
+
+    public function test_get_id_differs_for_different_methods(): void
+    {
+        $first  = new Route(['GET'], '/path', $this->handler);
+        $second = new Route(['POST'], '/path', $this->handler);
+
+        $this->assertNotSame($first->getId(), $second->getId());
+    }
+
+    public function test_get_id_is_unchanged_by_method_order(): void
+    {
+        $first  = new Route(['GET', 'POST'], '/path', $this->handler);
+        $second = new Route(['POST', 'GET'], '/path', $this->handler);
+
+        $this->assertSame($first->getId(), $second->getId());
+    }
+
+    public function test_get_id_is_unchanged_by_method_casing(): void
+    {
+        $first  = new Route(['get'], '/path', $this->handler);
+        $second = new Route(['GET'], '/path', $this->handler);
+
+        $this->assertSame($first->getId(), $second->getId());
+    }
+
+    public function test_get_debug_info_contains_id(): void
+    {
+        $route = new Route(['GET'], '/path', $this->handler);
+
+        $this->assertSame($route->getId(), $route->getDebugInfo()['id']);
+    }
+
     public function test_implements_route_interface(): void
     {
         $route = new Route(['GET'], '/path', $this->handler);

@@ -5,18 +5,19 @@ namespace Meritum\Http\Routing;
 use Traversable;
 use ArrayIterator;
 use IteratorAggregate;
+use Meritum\Http\Exception\RoutingException;
 use Psr\Http\Server\RequestHandlerInterface;
 use Georgeff\Kernel\Contract\DebuggableInterface;
 
 /**
  * @internal
  *
- * @implements IteratorAggregate<int, RouteInterface>
+ * @implements IteratorAggregate<string, RouteInterface>
  */
 final class RouteCollection implements IteratorAggregate, DebuggableInterface
 {
     /**
-     * @var array<int, RouteInterface>
+     * @var array<string, RouteInterface>
      */
     private array $routes = [];
 
@@ -45,7 +46,28 @@ final class RouteCollection implements IteratorAggregate, DebuggableInterface
      */
     public function add(array $methods, string $path, RequestHandlerInterface|string $handler): RouteInterface
     {
-        return $this->routes[] = new Route($methods, $path, $handler, $this->activeGroups);
+        $route = new Route($methods, $path, $handler, $this->activeGroups);
+
+        RoutingException::throwIf(
+            isset($this->routes[$route->getId()]),
+            sprintf(
+                'Duplicate route %s %s',
+                implode('|', $methods),
+                $path
+            )
+        );
+
+        return $this->routes[$route->getId()] = $route;
+    }
+
+    public function get(string $id): RouteInterface
+    {
+        $route = $this->routes[$id] ?? null;
+
+        RoutingException::throwIf(null === $route, "Route with ID [$id] was not found");
+
+        /** @var RouteInterface $route */
+        return $route;
     }
 
     public function isEmpty(): bool

@@ -11,6 +11,8 @@ use Meritum\Http\Middleware\MiddlewareStack;
  */
 final class Route implements RouteInterface
 {
+    private readonly string $id;
+
     /**
      * @var non-empty-list<string>
      */
@@ -43,7 +45,19 @@ final class Route implements RouteInterface
 
         $this->path = $path;
 
+        $this->id = $this->generateId($this->methods, $this->path);
+
         $this->middleware = new MiddlewareStack();
+    }
+
+    /**
+     * @param non-empty-list<string> $methods
+     */
+    private function generateId(array $methods, string $path): string
+    {
+        sort($methods, SORT_STRING);
+
+        return hash('xxh128', implode('|', $methods) . '_' . $path);
     }
 
     public function __clone(): void
@@ -54,6 +68,7 @@ final class Route implements RouteInterface
     public function getDebugInfo(): array
     {
         $data = [
+            'id'         => $this->id,
             'methods'    => $this->methods,
             'path'       => $this->path,
             'handler'    => is_string($this->handler) ? $this->handler : $this->handler::class,
@@ -67,6 +82,11 @@ final class Route implements RouteInterface
         }
 
         return $data;
+    }
+
+    public function getId(): string
+    {
+        return $this->id;
     }
 
     public function getMethods(): array

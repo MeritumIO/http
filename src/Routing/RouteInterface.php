@@ -9,6 +9,11 @@ use Georgeff\Kernel\Contract\DebuggableInterface;
 interface RouteInterface extends DebuggableInterface
 {
     /**
+     * Get the route identifier
+     */
+    public function getId(): string;
+
+    /**
      * The HTTP methods this route matches
      *
      * @return non-empty-list<string>

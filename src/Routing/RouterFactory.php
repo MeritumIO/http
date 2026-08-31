@@ -10,7 +10,7 @@ final class RouterFactory
 {
     /**
      * @param iterable<int, MiddlewareInterface|string> $middleware
-     * @param iterable<int, RouteInterface> $routes
+     * @param iterable<string, RouteInterface> $routes
      */
     public function __construct(
         private readonly iterable $middleware,

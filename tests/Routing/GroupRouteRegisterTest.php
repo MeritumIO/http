@@ -59,7 +59,7 @@ final class GroupRouteRegisterTest extends TestCase
 
         $route = $register->addRoute(['GET'], '/users', $this->handler);
 
-        $this->assertSame([$route], iterator_to_array($collection));
+        $this->assertSame([$route], array_values(iterator_to_array($collection)));
     }
 
     /**

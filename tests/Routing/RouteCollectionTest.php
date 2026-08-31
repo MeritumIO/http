@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Meritum\Http\Routing\RouteCollection;
 use Meritum\Http\Routing\RouteInterface;
 use Meritum\Http\Routing\RouteGroupInterface;
+use Meritum\Http\Exception\RoutingException;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -66,7 +67,7 @@ final class RouteCollectionTest extends TestCase
         $collection = new RouteCollection();
         $route      = $collection->add(['GET'], '/path', $this->handler);
 
-        $routes = iterator_to_array($collection);
+        $routes = array_values(iterator_to_array($collection));
 
         $this->assertCount(1, $routes);
         $this->assertSame($route, $routes[0]);
@@ -78,7 +79,7 @@ final class RouteCollectionTest extends TestCase
         $first      = $collection->add(['GET'], '/first', $this->handler);
         $second     = $collection->add(['POST'], '/second', $this->handler);
 
-        $routes = iterator_to_array($collection);
+        $routes = array_values(iterator_to_array($collection));
 
         $this->assertSame($first, $routes[0]);
         $this->assertSame($second, $routes[1]);
@@ -103,6 +104,65 @@ final class RouteCollectionTest extends TestCase
         $collection->add(['PUT'], '/c', $this->handler);
 
         $this->assertCount(3, iterator_to_array($collection));
+    }
+
+    public function test_add_throws_when_registering_a_duplicate_route(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(['GET'], '/path', $this->handler);
+
+        $this->expectException(RoutingException::class);
+        $this->expectExceptionMessage('Duplicate route GET /path');
+
+        $collection->add(['GET'], '/path', $this->handler);
+    }
+
+    public function test_add_throws_when_duplicate_route_has_reordered_methods(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(['GET', 'POST'], '/path', $this->handler);
+
+        $this->expectException(RoutingException::class);
+
+        $collection->add(['POST', 'GET'], '/path', $this->handler);
+    }
+
+    public function test_add_does_not_throw_for_the_same_path_with_different_methods(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(['GET'], '/path', $this->handler);
+        $route = $collection->add(['POST'], '/path', $this->handler);
+
+        $this->assertInstanceOf(RouteInterface::class, $route);
+    }
+
+    public function test_routes_are_keyed_by_their_id(): void
+    {
+        $collection = new RouteCollection();
+        $route      = $collection->add(['GET'], '/path', $this->handler);
+
+        $routes = iterator_to_array($collection);
+
+        $this->assertArrayHasKey($route->getId(), $routes);
+        $this->assertSame($route, $routes[$route->getId()]);
+    }
+
+    public function test_get_returns_the_route_with_the_given_id(): void
+    {
+        $collection = new RouteCollection();
+        $route      = $collection->add(['GET'], '/path', $this->handler);
+
+        $this->assertSame($route, $collection->get($route->getId()));
+    }
+
+    public function test_get_throws_when_the_route_is_not_found(): void
+    {
+        $collection = new RouteCollection();
+
+        $this->expectException(RoutingException::class);
+        $this->expectExceptionMessage('Route with ID [missing] was not found');
+
+        $collection->get('missing');
     }
 
     public function test_implements_debuggable_interface(): void
@@ -171,7 +231,7 @@ final class RouteCollectionTest extends TestCase
             $api->get('/users', $this->handler);
         });
 
-        $routes = iterator_to_array($collection);
+        $routes = array_values(iterator_to_array($collection));
 
         $this->assertSame('/api/users', $routes[0]->getPath());
     }
@@ -186,7 +246,7 @@ final class RouteCollectionTest extends TestCase
             });
         });
 
-        $routes = iterator_to_array($collection);
+        $routes = array_values(iterator_to_array($collection));
 
         $this->assertSame('/api/v1/users', $routes[0]->getPath());
     }
@@ -201,7 +261,7 @@ final class RouteCollectionTest extends TestCase
         });
         $group->addMiddleware($middleware);
 
-        $routes = iterator_to_array($collection);
+        $routes = array_values(iterator_to_array($collection));
 
         $this->assertSame([$middleware], iterator_to_array($routes[0]->getMiddleware()));
     }
@@ -218,7 +278,7 @@ final class RouteCollectionTest extends TestCase
 
         $collection->add(['GET'], '/outside', $this->handler);
 
-        $routes = iterator_to_array($collection);
+        $routes = array_values(iterator_to_array($collection));
 
         $this->assertSame([], iterator_to_array($routes[1]->getMiddleware()));
     }
