@@ -15,6 +15,11 @@ use Georgeff\Kernel\Contract\RunnableKernelInterface;
 interface HttpKernelInterface extends RunnableKernelInterface, RequestHandlerInterface, RouteRegistrationInterface
 {
     /**
+     * Enable the route cache
+     */
+    public function enableRouteCache(string $file): static;
+
+    /**
      * Add a middleware to the global stack
      */
     public function addMiddleware(MiddlewareInterface|string $middleware): static;

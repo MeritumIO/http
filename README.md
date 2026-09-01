@@ -113,6 +113,26 @@ $kernel->group('/api', function ($api) {
 
 Like `addRoute()`, `group()` must be called before `boot()`.
 
+### Route identifiers
+
+Every route has a unique `getId()` string, derived from its methods and path (method order and casing don't matter). Registering two routes with the same methods and path throws `RoutingException`:
+
+```php
+$kernel->get('/users', ListUsersHandler::class);
+$kernel->get('/users', OtherHandler::class); // throws RoutingException: Duplicate route GET /users
+```
+
+## Route caching
+
+For deployments with a large or slow-to-build route table, `enableRouteCache()` caches the compiled route-dispatch data to a file, skipping route re-registration on every request once the cache file exists:
+
+```php
+$kernel->enableRouteCache(__DIR__ . '/../var/cache/routes.php');
+$kernel->run();
+```
+
+Like `addRoute()`/`group()`, it must be called before `boot()`. The cache file is written the first time it's needed and reused as-is on every request after that — routes added or removed later aren't reflected until the file is deleted (or a different path is used) and regenerated, so clearing it is part of your deploy process whenever the route table changes.
+
 ## Middleware
 
 ### Global middleware

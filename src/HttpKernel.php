@@ -35,6 +35,8 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
     private bool $handled = false;
 
+    private ?string $routeCacheFile = null;
+
     public function __construct(EnvironmentInterface $environment, ?ContainerBuilderInterface $builder = null, bool $debug = false)
     {
         parent::__construct($environment, $builder, $debug);
@@ -52,9 +54,21 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
     {
         $this->onBooting(function () {
             $this->define(EmitterInterface::class, fn() => new SapiEmitter())->share();
-            $this->define(RequestHandlerInterface::class, new RouterFactory($this->middleware, $this->routes))->share();
             $this->define(ServerRequestInterface::class, fn() => ServerRequestFactory::fromGlobals())->share();
+            $this->define(
+                RequestHandlerInterface::class,
+                new RouterFactory($this->middleware, $this->routes, fn(): ?string => $this->routeCacheFile)
+            )->share();
         });
+    }
+
+    public function enableRouteCache(string $file): static
+    {
+        KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot enable route cache');
+
+        $this->routeCacheFile = $file;
+
+        return $this;
     }
 
     public function group(string $prefix, callable $callback): RouteGroupInterface
@@ -143,9 +157,9 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
         $profile = $this->profiler?->initProfile('handle');
 
-        $handler = $this->getContainer()->get(RequestHandlerInterface::class);
-
         try {
+            $handler = $this->getContainer()->get(RequestHandlerInterface::class);
+
             $profile?->startPhase('middleware');
 
             $response = $handler->handle($request);

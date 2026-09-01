@@ -23,14 +23,37 @@ use Psr\Http\Server\RequestHandlerInterface;
 
 final class HttpKernelTest extends TestCase
 {
+    /**
+     * @var list<string>
+     */
+    private array $cacheFiles = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->cacheFiles as $cacheFile) {
+            if (is_file($cacheFile)) {
+                unlink($cacheFile);
+            }
+        }
+    }
+
     private function createKernel(): HttpKernel
     {
         return new HttpKernel(new TestingEnvironment());
     }
 
+    private function cacheFile(): string
+    {
+        $file = sys_get_temp_dir() . '/meritum-http-route-cache-' . bin2hex(random_bytes(8)) . '.php';
+
+        $this->cacheFiles[] = $file;
+
+        return $file;
+    }
+
     private function createHandler(int $status = 200): RequestHandlerInterface
     {
-        return new class($status) implements RequestHandlerInterface {
+        return new class ($status) implements RequestHandlerInterface {
             public function __construct(private readonly int $status) {}
 
             public function handle(ServerRequestInterface $request): ResponseInterface
@@ -205,7 +228,7 @@ final class HttpKernelTest extends TestCase
     {
         $order = [];
 
-        $globalMiddleware = new class($order) implements MiddlewareInterface {
+        $globalMiddleware = new class ($order) implements MiddlewareInterface {
             public function __construct(private array &$order) {}
 
             public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
@@ -216,7 +239,7 @@ final class HttpKernelTest extends TestCase
             }
         };
 
-        $groupMiddleware = new class($order) implements MiddlewareInterface {
+        $groupMiddleware = new class ($order) implements MiddlewareInterface {
             public function __construct(private array &$order) {}
 
             public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
@@ -227,7 +250,7 @@ final class HttpKernelTest extends TestCase
             }
         };
 
-        $routeMiddleware = new class($order) implements MiddlewareInterface {
+        $routeMiddleware = new class ($order) implements MiddlewareInterface {
             public function __construct(private array &$order) {}
 
             public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
@@ -238,7 +261,7 @@ final class HttpKernelTest extends TestCase
             }
         };
 
-        $handler = new class($order) implements RequestHandlerInterface {
+        $handler = new class ($order) implements RequestHandlerInterface {
             public function __construct(private array &$order) {}
 
             public function handle(ServerRequestInterface $request): ResponseInterface
@@ -276,6 +299,37 @@ final class HttpKernelTest extends TestCase
         $this->expectException(KernelException::class);
 
         $kernel->addMiddleware('SomeMiddleware');
+    }
+
+    public function test_enable_route_cache_returns_static(): void
+    {
+        $kernel = $this->createKernel();
+
+        $this->assertSame($kernel, $kernel->enableRouteCache($this->cacheFile()));
+    }
+
+    public function test_enable_route_cache_throws_after_boot(): void
+    {
+        $kernel = $this->createBootedKernel();
+
+        $this->expectException(KernelException::class);
+
+        $kernel->enableRouteCache($this->cacheFile());
+    }
+
+    public function test_handle_dispatches_through_the_route_cache_when_enabled(): void
+    {
+        $cacheFile = $this->cacheFile();
+
+        $kernel = $this->createKernel();
+        $kernel->addRoute('GET', '/test', $this->createHandler());
+        $kernel->enableRouteCache($cacheFile);
+        $kernel->boot();
+
+        $response = $kernel->handle(new ServerRequest([], [], '/test', 'GET'));
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertFileExists($cacheFile);
     }
 
     public function test_add_exception_handler_returns_static(): void
@@ -342,7 +396,7 @@ final class HttpKernelTest extends TestCase
         $kernel->addExceptionHandler(function (ContainerInterface $container) {
             $status = $container->get('exception.status');
 
-            return new class($status) implements ExceptionHandlerInterface {
+            return new class ($status) implements ExceptionHandlerInterface {
                 public function __construct(private readonly int $status) {}
 
                 public function handle(Throwable $e, ServerRequestInterface $request): ResponseInterface
