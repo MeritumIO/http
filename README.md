@@ -252,6 +252,10 @@ final class UnprocessableEntityException extends HttpException
 
 `MiddlewareStackException` is thrown when a middleware entry registered by container service ID can't actually be resolved — either the container can't find it, or it resolves to something that doesn't implement `MiddlewareInterface`. Like `RoutingException`, it does **not** implement `HttpExceptionInterface` — it signals a misconfigured middleware entry rather than something the client did. It still reaches your registered exception handler like any other `Throwable`, and preserves a container resolution failure via `getPrevious()`.
 
+### Route cache exceptions
+
+`RouteCacheException` is thrown when [route caching](#route-caching) is enabled and the cache file can't actually be used — most commonly a corrupt or invalid cache file. Like `RoutingException` and `MiddlewareStackException`, it does **not** implement `HttpExceptionInterface` and preserves the original failure via `getPrevious()`.
+
 ## Response emission
 
 Responses are emitted through `EmitterInterface`, resolved from the container in `run()`. The default implementation, `SapiEmitter`, writes headers and body via `header()`/`echo`. Swap it for a custom implementation before boot — useful for non-SAPI runtimes (Swoole, RoadRunner workers) or tests that want to capture the response instead of emitting it:
