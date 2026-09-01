@@ -122,6 +122,14 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
         return $this->addRoute(['HEAD'], $uri, $handler);
     }
 
+    public function getRoutes(): iterable
+    {
+        return array_map(
+            static fn(RouteInterface $r): RouteInterface => clone $r,
+            iterator_to_array($this->routes, true)
+        );
+    }
+
     public function addMiddleware(MiddlewareInterface|string $middleware): static
     {
         KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot add middleware to the global stack');

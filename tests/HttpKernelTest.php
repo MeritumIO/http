@@ -180,6 +180,78 @@ final class HttpKernelTest extends TestCase
         $kernel->get('/new', $this->createHandler());
     }
 
+    public function test_get_routes_returns_empty_by_default(): void
+    {
+        $routes = iterator_to_array($this->createKernel()->getRoutes());
+
+        $this->assertSame([], $routes);
+    }
+
+    public function test_get_routes_returns_registered_routes(): void
+    {
+        $kernel = $this->createKernel();
+        $route  = $kernel->addRoute('GET', '/test', $this->createHandler());
+
+        $routes = iterator_to_array($kernel->getRoutes());
+
+        $this->assertCount(1, $routes);
+        $this->assertSame($route->getId(), $routes[$route->getId()]->getId());
+        $this->assertSame($route->getPath(), $routes[$route->getId()]->getPath());
+    }
+
+    public function test_get_routes_returns_clones_rather_than_the_registered_instances(): void
+    {
+        $kernel = $this->createKernel();
+        $route  = $kernel->addRoute('GET', '/test', $this->createHandler());
+
+        $routes = iterator_to_array($kernel->getRoutes());
+
+        $this->assertNotSame($route, $routes[$route->getId()]);
+    }
+
+    public function test_mutating_a_route_returned_by_get_routes_does_not_affect_the_registered_route(): void
+    {
+        $kernel = $this->createKernel();
+        $route  = $kernel->addRoute('GET', '/test', $this->createHandler());
+
+        $routes = iterator_to_array($kernel->getRoutes());
+        $routes[$route->getId()]->addMiddleware('SomeMiddleware');
+
+        $this->assertFalse($route->hasMiddleware());
+    }
+
+    public function test_get_routes_are_keyed_by_route_id(): void
+    {
+        $kernel = $this->createKernel();
+        $route  = $kernel->addRoute('GET', '/test', $this->createHandler());
+
+        $routes = iterator_to_array($kernel->getRoutes());
+
+        $this->assertArrayHasKey($route->getId(), $routes);
+    }
+
+    public function test_get_routes_reflects_routes_registered_in_groups(): void
+    {
+        $kernel = $this->createKernel();
+        $kernel->group('/api', function ($api) {
+            $api->get('/users', $this->createHandler());
+        });
+
+        $routes = iterator_to_array($kernel->getRoutes());
+
+        $this->assertCount(1, $routes);
+        $this->assertSame('/api/users', array_values($routes)[0]->getPath());
+    }
+
+    public function test_get_routes_can_be_called_after_boot(): void
+    {
+        $kernel = $this->createBootedKernel();
+
+        $routes = iterator_to_array($kernel->getRoutes());
+
+        $this->assertCount(1, $routes);
+    }
+
     public function test_group_returns_route_group_interface(): void
     {
         $group = $this->createKernel()->group('/api', function () {});

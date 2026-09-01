@@ -6,6 +6,7 @@ use Georgeff\Kernel\KernelInterface;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Server\MiddlewareInterface;
+use Meritum\Http\Routing\RouteInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Meritum\Http\Routing\RouteRegistrationInterface;
@@ -42,4 +43,11 @@ interface HttpKernelInterface extends RunnableKernelInterface, RequestHandlerInt
      * Terminate a request/response cycle
      */
     public function terminate(ServerRequestInterface $request, ResponseInterface $response): void;
+
+    /**
+     * Get registered routes, keyed by route ID
+     *
+     * @return iterable<string, RouteInterface>
+     */
+    public function getRoutes(): iterable;
 }

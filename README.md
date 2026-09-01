@@ -122,6 +122,18 @@ $kernel->get('/users', ListUsersHandler::class);
 $kernel->get('/users', OtherHandler::class); // throws RoutingException: Duplicate route GET /users
 ```
 
+### Inspecting registered routes
+
+`getRoutes()` returns every registered route — including ones registered inside `group()` callbacks — keyed by route ID:
+
+```php
+foreach ($kernel->getRoutes() as $id => $route) {
+    // $route->getPath(), $route->getMethods(), ...
+}
+```
+
+Unlike `addRoute()`/`group()`, it can be called both before and after `boot()`.
+
 ## Route caching
 
 For deployments with a large or slow-to-build route table, `enableRouteCache()` caches the compiled route-dispatch data to a file, skipping route re-registration on every request once the cache file exists:
