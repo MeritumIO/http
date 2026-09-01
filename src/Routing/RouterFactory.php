@@ -5,6 +5,7 @@ namespace Meritum\Http\Routing;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Meritum\Http\Exception\RouteCacheException;
 
 final class RouterFactory
 {
@@ -24,9 +25,18 @@ final class RouterFactory
 
         $dispatcher = null === $cacheFile
             ? \FastRoute\simpleDispatcher($this->getRouteDefinitionCallback())
-            : \FastRoute\cachedDispatcher($this->getRouteDefinitionCallback(), ['cacheFile' => $cacheFile]);
+            : $this->getCachedDispatcher($cacheFile);
 
         return new Router($this->middleware, $this->routes, $dispatcher, $container);
+    }
+
+    private function getCachedDispatcher(string $cacheFile): \FastRoute\Dispatcher
+    {
+        try {
+            return \FastRoute\cachedDispatcher($this->getRouteDefinitionCallback(), ['cacheFile' => $cacheFile]);
+        } catch (\Throwable $e) {
+            RouteCacheException::throw($e->getMessage(), $e);
+        }
     }
 
     private function getRouteDefinitionCallback(): callable

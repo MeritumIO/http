@@ -7,6 +7,7 @@ use Meritum\Http\Routing\Route;
 use Meritum\Http\Routing\RouteCollection;
 use Meritum\Http\Routing\RouterFactory;
 use Meritum\Http\Exception\NotFoundHttpException;
+use Meritum\Http\Exception\RouteCacheException;
 use Laminas\Diactoros\Response;
 use Laminas\Diactoros\ServerRequest;
 use Psr\Container\ContainerInterface;
@@ -189,5 +190,33 @@ final class RouterFactoryTest extends TestCase
         $this->expectException(NotFoundHttpException::class);
 
         $router->handle(new ServerRequest([], [], '/posts', 'GET'));
+    }
+
+    public function test_invoking_throws_a_route_cache_exception_when_the_cache_file_is_corrupt(): void
+    {
+        $cacheFile = $this->cacheFile();
+        file_put_contents($cacheFile, '<?php return null;');
+
+        $factory = new RouterFactory([], new RouteCollection(), fn(): ?string => $cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+
+        $factory($this->container());
+    }
+
+    public function test_route_cache_exception_preserves_the_original_exception_as_previous(): void
+    {
+        $cacheFile = $this->cacheFile();
+        file_put_contents($cacheFile, '<?php return null;');
+
+        $factory = new RouterFactory([], new RouteCollection(), fn(): ?string => $cacheFile);
+
+        try {
+            $factory($this->container());
+            $this->fail('Expected RouteCacheException');
+        } catch (RouteCacheException $e) {
+            $this->assertInstanceOf(\RuntimeException::class, $e->getPrevious());
+            $this->assertSame('Invalid cache file "' . $cacheFile . '"', $e->getPrevious()?->getMessage());
+        }
     }
 }
