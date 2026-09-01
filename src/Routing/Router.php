@@ -22,6 +22,7 @@ final class Router implements RequestHandlerInterface
      */
     public function __construct(
         private readonly iterable $middleware,
+        private readonly RouteCollection $routes,
         private readonly Dispatcher $dispatcher,
         private readonly ContainerInterface $container
     ) {}
@@ -44,13 +45,13 @@ final class Router implements RequestHandlerInterface
             $this->handleNotFound($request, $method, $path);
         }
 
-        /** @var RouteInterface $route */
-        $route = $result[1];
+        /** @var string $id */
+        $id = $result[1];
 
         /** @var array<string, string> $arguments */
         $arguments = $result[2];
 
-        return $this->handleFound($route, $arguments, $request);
+        return $this->handleFound($this->routes->get($id), $arguments, $request);
     }
 
     /**

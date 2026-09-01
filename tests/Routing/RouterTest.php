@@ -4,9 +4,9 @@ namespace Meritum\Http\Test\Routing;
 
 use FastRoute\Dispatcher;
 use PHPUnit\Framework\TestCase;
-use Meritum\Http\Routing\Route;
 use Meritum\Http\Routing\Router;
 use Meritum\Http\Routing\RouteInterface;
+use Meritum\Http\Routing\RouteCollection;
 use Meritum\Http\Exception\RoutingException;
 use Meritum\Http\Exception\NotFoundHttpException;
 use Meritum\Http\Exception\MethodNotAllowedHttpException;
@@ -41,11 +41,11 @@ final class RouterTest extends TestCase
         };
     }
 
-    private function dispatcher(array $routes): Dispatcher
+    private function dispatcher(RouteCollection $routes): Dispatcher
     {
         return \FastRoute\simpleDispatcher(function (\FastRoute\RouteCollector $r) use ($routes) {
-            foreach ($routes as [$methods, $path, $route]) {
-                $r->addRoute($methods, $path, $route);
+            foreach ($routes as $route) {
+                $r->addRoute($route->getMethods(), $route->getPath(), $route->getId());
             }
         });
     }
@@ -57,7 +57,8 @@ final class RouterTest extends TestCase
 
     public function test_implements_request_handler_interface(): void
     {
-        $router = new Router([], $this->dispatcher([]), $this->container());
+        $collection = new RouteCollection();
+        $router     = new Router([], $collection, $this->dispatcher($collection), $this->container());
 
         $this->assertInstanceOf(RequestHandlerInterface::class, $router);
     }
@@ -74,9 +75,10 @@ final class RouterTest extends TestCase
             }
         };
 
-        $route      = new Route(['GET'], '/users', $handler);
-        $dispatcher = $this->dispatcher([[['GET'], '/users', $route]]);
-        $router     = new Router([], $dispatcher, $this->container());
+        $collection = new RouteCollection();
+        $collection->add(['GET'], '/users', $handler);
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([], $collection, $dispatcher, $this->container());
         $request    = new ServerRequest([], [], '/users', 'GET');
 
         $this->assertSame($response, $router->handle($request));
@@ -84,8 +86,9 @@ final class RouterTest extends TestCase
 
     public function test_throws_not_found_for_unmatched_route(): void
     {
-        $router  = new Router([], $this->dispatcher([]), $this->container());
-        $request = new ServerRequest([], [], '/missing', 'GET');
+        $collection = new RouteCollection();
+        $router     = new Router([], $collection, $this->dispatcher($collection), $this->container());
+        $request    = new ServerRequest([], [], '/missing', 'GET');
 
         $this->expectException(NotFoundHttpException::class);
 
@@ -101,9 +104,10 @@ final class RouterTest extends TestCase
             }
         };
 
-        $route      = new Route(['GET'], '/users', $handler);
-        $dispatcher = $this->dispatcher([[['GET'], '/users', $route]]);
-        $router     = new Router([], $dispatcher, $this->container());
+        $collection = new RouteCollection();
+        $collection->add(['GET'], '/users', $handler);
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([], $collection, $dispatcher, $this->container());
         $request    = new ServerRequest([], [], '/users', 'POST');
 
         $this->expectException(MethodNotAllowedHttpException::class);
@@ -120,9 +124,10 @@ final class RouterTest extends TestCase
             }
         };
 
-        $route      = new Route(['GET', 'PUT'], '/users', $handler);
-        $dispatcher = $this->dispatcher([[['GET', 'PUT'], '/users', $route]]);
-        $router     = new Router([], $dispatcher, $this->container());
+        $collection = new RouteCollection();
+        $collection->add(['GET', 'PUT'], '/users', $handler);
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([], $collection, $dispatcher, $this->container());
         $request    = new ServerRequest([], [], '/users', 'POST');
 
         try {
@@ -148,9 +153,10 @@ final class RouterTest extends TestCase
             }
         };
 
-        $route      = new Route(['GET'], '/users/{id}', $handler);
-        $dispatcher = $this->dispatcher([[['GET'], '/users/{id}', $route]]);
-        $router     = new Router([], $dispatcher, $this->container());
+        $collection = new RouteCollection();
+        $collection->add(['GET'], '/users/{id}', $handler);
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([], $collection, $dispatcher, $this->container());
         $request    = new ServerRequest([], [], '/users/42', 'GET');
 
         $router->handle($request);
@@ -170,9 +176,10 @@ final class RouterTest extends TestCase
             }
         };
 
-        $route      = new Route(['GET'], '/path', 'handler.service');
-        $dispatcher = $this->dispatcher([[['GET'], '/path', $route]]);
-        $router     = new Router([], $dispatcher, $this->container(['handler.service' => $handler]));
+        $collection = new RouteCollection();
+        $collection->add(['GET'], '/path', 'handler.service');
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([], $collection, $dispatcher, $this->container(['handler.service' => $handler]));
         $request    = new ServerRequest([], [], '/path', 'GET');
 
         $this->assertSame($response, $router->handle($request));
@@ -180,9 +187,10 @@ final class RouterTest extends TestCase
 
     public function test_throws_routing_exception_for_invalid_handler(): void
     {
-        $route      = new Route(['GET'], '/path', 'bad.handler');
-        $dispatcher = $this->dispatcher([[['GET'], '/path', $route]]);
-        $router     = new Router([], $dispatcher, $this->container(['bad.handler' => new \stdClass()]));
+        $collection = new RouteCollection();
+        $collection->add(['GET'], '/path', 'bad.handler');
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([], $collection, $dispatcher, $this->container(['bad.handler' => new \stdClass()]));
         $request    = new ServerRequest([], [], '/path', 'GET');
 
         $this->expectException(RoutingException::class);
@@ -192,9 +200,10 @@ final class RouterTest extends TestCase
 
     public function test_throws_routing_exception_when_handler_service_not_found(): void
     {
-        $route      = new Route(['GET'], '/path', 'missing.handler');
-        $dispatcher = $this->dispatcher([[['GET'], '/path', $route]]);
-        $router     = new Router([], $dispatcher, $this->container());
+        $collection = new RouteCollection();
+        $collection->add(['GET'], '/path', 'missing.handler');
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([], $collection, $dispatcher, $this->container());
         $request    = new ServerRequest([], [], '/path', 'GET');
 
         $this->expectException(RoutingException::class);
@@ -204,9 +213,10 @@ final class RouterTest extends TestCase
 
     public function test_routing_exception_preserves_the_container_exception_as_previous(): void
     {
-        $route      = new Route(['GET'], '/path', 'missing.handler');
-        $dispatcher = $this->dispatcher([[['GET'], '/path', $route]]);
-        $router     = new Router([], $dispatcher, $this->container());
+        $collection = new RouteCollection();
+        $collection->add(['GET'], '/path', 'missing.handler');
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([], $collection, $dispatcher, $this->container());
         $request    = new ServerRequest([], [], '/path', 'GET');
 
         try {
@@ -243,9 +253,10 @@ final class RouterTest extends TestCase
             }
         };
 
-        $route      = new Route(['GET'], '/path', $handler);
-        $dispatcher = $this->dispatcher([[['GET'], '/path', $route]]);
-        $router     = new Router([$middleware], $dispatcher, $this->container());
+        $collection = new RouteCollection();
+        $collection->add(['GET'], '/path', $handler);
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([$middleware], $collection, $dispatcher, $this->container());
         $request    = new ServerRequest([], [], '/path', 'GET');
 
         $router->handle($request);
@@ -278,11 +289,12 @@ final class RouterTest extends TestCase
             }
         };
 
-        $route = new Route(['GET'], '/path', $handler);
+        $collection = new RouteCollection();
+        $route      = $collection->add(['GET'], '/path', $handler);
         $route->addMiddleware($routeMiddleware);
 
-        $dispatcher = $this->dispatcher([[['GET'], '/path', $route]]);
-        $router     = new Router([], $dispatcher, $this->container());
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([], $collection, $dispatcher, $this->container());
         $request    = new ServerRequest([], [], '/path', 'GET');
 
         $router->handle($request);
@@ -328,11 +340,12 @@ final class RouterTest extends TestCase
             }
         };
 
-        $route = new Route(['GET'], '/path', $handler);
+        $collection = new RouteCollection();
+        $route      = $collection->add(['GET'], '/path', $handler);
         $route->addMiddleware($routeMiddleware);
 
-        $dispatcher = $this->dispatcher([[['GET'], '/path', $route]]);
-        $router     = new Router([$globalMiddleware], $dispatcher, $this->container());
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([$globalMiddleware], $collection, $dispatcher, $this->container());
         $request    = new ServerRequest([], [], '/path', 'GET');
 
         $router->handle($request);
@@ -365,11 +378,12 @@ final class RouterTest extends TestCase
             }
         };
 
-        $route = new Route(['GET'], '/path', $handler);
+        $collection = new RouteCollection();
+        $route      = $collection->add(['GET'], '/path', $handler);
         $route->addMiddleware('some.middleware');
 
-        $dispatcher = $this->dispatcher([[['GET'], '/path', $route]]);
-        $router     = new Router([], $dispatcher, $this->container(['some.middleware' => $middleware]));
+        $dispatcher = $this->dispatcher($collection);
+        $router     = new Router([], $collection, $dispatcher, $this->container(['some.middleware' => $middleware]));
         $request    = new ServerRequest([], [], '/path', 'GET');
 
         $router->handle($request);

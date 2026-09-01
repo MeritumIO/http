@@ -10,21 +10,20 @@ final class RouterFactory
 {
     /**
      * @param iterable<int, MiddlewareInterface|string> $middleware
-     * @param iterable<string, RouteInterface> $routes
      */
     public function __construct(
         private readonly iterable $middleware,
-        private readonly iterable $routes
+        private readonly RouteCollection $routes
     ) {}
 
     public function __invoke(ContainerInterface $container): RequestHandlerInterface
     {
         $dispatcher = \FastRoute\simpleDispatcher(function (\FastRoute\RouteCollector $r) {
             foreach ($this->routes as $route) {
-                $r->addRoute($route->getMethods(), $route->getPath(), $route);
+                $r->addRoute($route->getMethods(), $route->getPath(), $route->getId());
             }
         });
 
-        return new Router($this->middleware, $dispatcher, $container);
+        return new Router($this->middleware, $this->routes, $dispatcher, $container);
     }
 }
