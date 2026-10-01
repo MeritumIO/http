@@ -6,6 +6,9 @@ use Psr\Container\ContainerInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Meritum\Http\Exception\MiddlewareStackException;
 
+/**
+ * @internal
+ */
 final class MiddlewareResolver
 {
     public function __construct(private readonly ContainerInterface $container) {}

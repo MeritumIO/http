@@ -7,6 +7,9 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Meritum\Http\Exception\RouteCacheException;
 
+/**
+ * @internal
+ */
 final class RouterFactory
 {
     /**

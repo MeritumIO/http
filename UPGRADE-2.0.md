@@ -78,17 +78,35 @@ If you parse `getDebugInfo()` output directly (dashboards, logging, tests) rathe
 - [ ] `['terminate']` only appears once `terminate()` has actually run for the current request — but unlike 1.x, it appears whether `terminate()` was called via `run()` or standalone, so this is more consistently available than before, not less.
 - [ ] New keys to be aware of, not migrations: `getDebugInfo()['components']['routes']` and `['middleware']` — present as soon as debug mode is enabled, reflecting whatever's registered via `addRoute()`/the HTTP-verb methods/`addMiddleware()`, even before `boot()`.
 
+## 8. Middleware failures: `\InvalidArgumentException` → `MiddlewareStackException`
+
+- [ ] If you catch `\InvalidArgumentException` around a middleware entry that resolves to something that doesn't implement `MiddlewareInterface`, catch `Meritum\Http\Exception\MiddlewareStackException` instead. It extends `\RuntimeException`, not `\InvalidArgumentException`, so the old catch no longer matches.
+- [ ] If you catch your DI container's own "not found" exception around a middleware service ID that can't be resolved, that failure is now wrapped in `MiddlewareStackException` too. Use `getPrevious()` if you need the original container exception.
+
+## 9. Duplicate routes throw at registration
+
+- [ ] Registering two routes with the same methods and path now throws `RoutingException` (`Duplicate route METHODS PATH`) as soon as the second one is registered. In 1.x the duplicate was accepted and failed later, when the dispatcher was built, with FastRoute's `BadRouteException`. Remove the duplicate registration; if you caught `FastRoute\BadRouteException` for this, catch `RoutingException` instead. Method order and casing don't matter: `['GET', 'POST']` and `['post', 'get']` on the same path are the same route.
+
+## 10. `Router`, `RouterFactory`, and `MiddlewareResolver` are now internal
+
+Only relevant if you construct or extend these classes yourself rather than letting `HttpKernel` build them.
+
+- [ ] All three are now marked `@internal` and can change in any release without notice. Their constructors have already changed in 2.0. Stop depending on them directly: register routes and middleware through `HttpKernel` (`addRoute()`, `group()`, `addMiddleware()`), and if you need to replace the whole pipeline, use `$kernel->override(RequestHandlerInterface::class, ...)`.
+
 ## Not required, but worth adopting
 
 These are new in 2.0 and don't require any change to upgrade:
 
 - **HTTP-verb shortcuts** — `get()`/`post()`/`put()`/`patch()`/`delete()`/`options()`/`head()` on `HttpKernelInterface`, thin wrappers over `addRoute()` for the common single-method case.
-- **`addExceptionHandler(callable $factory)`** — registers the exception handler via a factory that receives the container, instead of calling `define(ExceptionHandlerInterface::class, ...)` directly. Existing `define()`-based registration still works unchanged; this is purely a more ergonomic entrypoint, and the only way an exception handler with its own dependencies can resolve them.
-- **`EmitterInterface`** — response emission now goes through the container (`SapiEmitter` remains the default). Swap in a custom implementation via `define(EmitterInterface::class, ...)` before boot for non-SAPI runtimes or tests that want to capture the response instead of emitting it.
+- **Route groups** — `group(string $prefix, callable $callback)` registers routes under a shared path prefix, with group-level middleware attached via `addMiddleware()` on the returned `RouteGroupInterface`. Groups nest.
+- **Route caching** — `enableRouteCache(string $file)` caches FastRoute's compiled dispatch data to a file. Clearing the file when the route table changes is a deploy-time step.
+- **Route introspection** — `getRoutes()` returns every registered route keyed by its `getId()`, before or after `boot()`.
+- **`addExceptionHandler(callable $factory)`** — registers the exception handler via a factory that receives the container, as a shorter alternative to `define(ExceptionHandlerInterface::class, ...)->share()`. It's a thin wrapper over `define()`, so calling it twice, or alongside your own `define(ExceptionHandlerInterface::class, ...)`, throws `DefinitionException`.
+- **`EmitterInterface`** — response emission now goes through the container (`SapiEmitter` remains the default). Swap in a custom implementation with a plain `define(EmitterInterface::class, ...)`, from the bootstrap or any module, for non-SAPI runtimes or tests that want to capture the response instead of emitting it. `ServerRequestInterface` can be replaced the same way.
 
 ## Verifying the upgrade
 
 - [ ] `composer test` — full suite passes
 - [ ] `composer analyze` — PHPStan clean at `level: max`
-- [ ] Grep your own codebase for `Environment::`, `Meritum\Http\Exception\ExceptionHandlerInterface`, `__route__`, and `requestProfile` — anything still matching needs one of the sections above.
+- [ ] Grep your own codebase for `Environment::`, `Meritum\Http\Exception\ExceptionHandlerInterface`, `__route__`, `requestProfile`, `BadRouteException`, `Routing\Router`, `RouterFactory`, and `MiddlewareResolver` — anything still matching needs one of the sections above. Also check any `catch (\InvalidArgumentException` near middleware registration (section 8).
 - [ ] Also run through [`georgeff/kernel`'s own verification checklist](https://github.com/MikeGeorgeff/kernel/blob/main/UPGRADE-2.0.md#verifying-the-upgrade) for base-kernel-level changes.

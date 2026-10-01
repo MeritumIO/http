@@ -1,5 +1,9 @@
 # meritum/http
 
+[![CI](https://github.com/MeritumIO/http/actions/workflows/ci.yml/badge.svg)](https://github.com/MeritumIO/http/actions/workflows/ci.yml)
+[![Coverage Status](https://coveralls.io/repos/github/MeritumIO/http/badge.svg?branch=main)](https://coveralls.io/github/MeritumIO/http?branch=main)
+[![Packagist Version](https://img.shields.io/packagist/v/meritum/http)](https://packagist.org/packages/meritum/http)
+
 Module-first PSR-15 HTTP kernel for the Meritum ecosystem.
 
 ## Requirements
@@ -185,6 +189,8 @@ $kernel->addExceptionHandler(function (ContainerInterface $container) {
 });
 ```
 
+`addExceptionHandler()` defines `ExceptionHandlerInterface` in the container, so it can only be called once, and not alongside your own `define(ExceptionHandlerInterface::class, ...)`. A second registration throws `DefinitionException`.
+
 ```php
 use Meritum\Http\Contract\ExceptionHandlerInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -263,8 +269,12 @@ Responses are emitted through `EmitterInterface`, resolved from the container in
 ```php
 use Meritum\Http\Contract\EmitterInterface;
 
-$kernel->define(EmitterInterface::class, fn() => new MyEmitter())->share();
+$kernel->define(EmitterInterface::class, fn() => new MyEmitter());
 ```
+
+The default emitter is only a fallback, so your definition replaces it whether it's registered in the bootstrap or from any module, in any order. The incoming request works the same way: `run()` resolves `ServerRequestInterface` from the container, built from globals by default, and a `define(ServerRequestInterface::class, ...)` of your own replaces it.
+
+`RequestHandlerInterface`, the router and middleware pipeline, is not a fallback. Defining it yourself throws `DefinitionException` at boot, so a module that happens to register the generic PSR-15 id can't silently replace the pipeline. Use `$kernel->override(RequestHandlerInterface::class, ...)` if you really mean to replace it.
 
 ## Terminating callbacks
 
@@ -333,7 +343,7 @@ final class ApiModule implements ModuleInterface
         $kernel->get('/api/users', ListUsersHandler::class);
         $kernel->addMiddleware(ApiAuthMiddleware::class);
 
-        $kernel->define(ListUsersHandler::class, fn() => new ListUsersHandler())->share();
+        $kernel->define(ListUsersHandler::class, fn() => new ListUsersHandler());
     }
 }
 ```

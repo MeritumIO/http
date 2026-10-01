@@ -15,6 +15,9 @@ use Meritum\Http\Exception\NotFoundHttpException;
 use Meritum\Http\Middleware\RequestHandlerMiddleware;
 use Meritum\Http\Exception\MethodNotAllowedHttpException;
 
+/**
+ * @internal
+ */
 final class Router implements RequestHandlerInterface
 {
     /**

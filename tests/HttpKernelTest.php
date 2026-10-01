@@ -5,7 +5,11 @@ namespace Meritum\Http\Test;
 use Throwable;
 use Laminas\Diactoros\Response;
 use Laminas\Diactoros\ServerRequest;
+use Georgeff\Kernel\KernelInterface;
+use Meritum\Http\Emitter\SapiEmitter;
+use Georgeff\Kernel\Contract\ModuleInterface;
 use Georgeff\Kernel\Exception\KernelException;
+use Georgeff\Kernel\Exception\DefinitionException;
 use Georgeff\Kernel\Environment\Testing as TestingEnvironment;
 use Meritum\Http\Contract\EmitterInterface;
 use Meritum\Http\Contract\ExceptionHandlerInterface;
@@ -624,6 +628,73 @@ final class HttpKernelTest extends TestCase
         $this->assertTrue($kernel->isShutdown());
         $this->assertTrue($terminated);
         $this->assertSame(200, $emitter->response?->getStatusCode());
+    }
+
+    public function test_emitter_and_request_fall_back_to_the_defaults(): void
+    {
+        $kernel = $this->createBootedKernel();
+
+        $this->assertInstanceOf(SapiEmitter::class, $kernel->getContainer()->get(EmitterInterface::class));
+        $this->assertInstanceOf(ServerRequestInterface::class, $kernel->getContainer()->get(ServerRequestInterface::class));
+    }
+
+    public function test_emitter_and_request_defined_before_boot_replace_the_defaults(): void
+    {
+        $emitter = new class implements EmitterInterface {
+            public ?ResponseInterface $response = null;
+
+            public function emit(ResponseInterface $response): void
+            {
+                $this->response = $response;
+            }
+        };
+
+        $kernel = $this->createKernel();
+        $kernel->addRoute('GET', '/test', $this->createHandler(201));
+        $kernel->define(ServerRequestInterface::class, fn() => new ServerRequest([], [], '/test', 'GET'));
+        $kernel->define(EmitterInterface::class, fn() => $emitter);
+
+        $kernel->run();
+
+        $this->assertSame(201, $emitter->response?->getStatusCode());
+    }
+
+    public function test_emitter_and_request_defined_from_a_module_replace_the_defaults(): void
+    {
+        $emitter = new class implements EmitterInterface {
+            public ?ResponseInterface $response = null;
+
+            public function emit(ResponseInterface $response): void
+            {
+                $this->response = $response;
+            }
+        };
+
+        $kernel = $this->createKernel();
+        $kernel->addRoute('GET', '/test', $this->createHandler(201));
+        $kernel->addModule(new class ($emitter) implements ModuleInterface {
+            public function __construct(private readonly EmitterInterface $emitter) {}
+
+            public function register(KernelInterface $kernel): void
+            {
+                $kernel->define(ServerRequestInterface::class, fn() => new ServerRequest([], [], '/test', 'GET'));
+                $kernel->define(EmitterInterface::class, fn() => $this->emitter);
+            }
+        });
+
+        $kernel->run();
+
+        $this->assertSame(201, $emitter->response?->getStatusCode());
+    }
+
+    public function test_request_handler_cannot_be_redefined(): void
+    {
+        $kernel = $this->createKernel();
+        $kernel->define(RequestHandlerInterface::class, fn() => $this->createHandler());
+
+        $this->expectException(DefinitionException::class);
+
+        $kernel->boot();
     }
 
     public function test_run_boots_an_unbooted_kernel(): void

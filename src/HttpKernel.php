@@ -16,11 +16,11 @@ use Laminas\Diactoros\ServerRequestFactory;
 use Psr\Http\Message\ServerRequestInterface;
 use Meritum\Http\Middleware\MiddlewareStack;
 use Psr\Http\Server\RequestHandlerInterface;
+use Meritum\Http\Routing\RouteGroupInterface;
 use Georgeff\Kernel\Exception\KernelException;
 use Georgeff\Kernel\Contract\EnvironmentInterface;
 use Meritum\Http\Contract\ExceptionHandlerInterface;
 use Georgeff\Kernel\Contract\ContainerBuilderInterface;
-use Meritum\Http\Routing\RouteGroupInterface;
 
 final class HttpKernel extends Kernel implements HttpKernelInterface
 {
@@ -53,8 +53,8 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
     private function configure(): void
     {
         $this->onBooting(function () {
-            $this->define(EmitterInterface::class, fn() => new SapiEmitter())->share();
-            $this->define(ServerRequestInterface::class, fn() => ServerRequestFactory::fromGlobals())->share();
+            $this->defineFallback(EmitterInterface::class, fn() => new SapiEmitter())->share();
+            $this->defineFallback(ServerRequestInterface::class, fn() => ServerRequestFactory::fromGlobals())->share();
             $this->define(
                 RequestHandlerInterface::class,
                 new RouterFactory($this->middleware, $this->routes, fn(): ?string => $this->routeCacheFile)
