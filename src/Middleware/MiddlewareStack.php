@@ -6,22 +6,43 @@ use Traversable;
 use ArrayIterator;
 use IteratorAggregate;
 use Psr\Http\Server\MiddlewareInterface;
+use Georgeff\Kernel\Contract\DebuggableInterface;
 
 /**
  * @internal
  *
  * @implements IteratorAggregate<int, MiddlewareInterface|string>
  */
-final class MiddlewareStack implements IteratorAggregate
+final class MiddlewareStack implements IteratorAggregate, DebuggableInterface
 {
     /**
      * @var array<int, MiddlewareInterface|string>
      */
     private array $middleware = [];
 
-    public function add(MiddlewareInterface|string $middleware): static
+    public function getDebugInfo(): array
+    {
+        $data = [];
+
+        foreach ($this->middleware as $middleware) {
+            $data[] = is_string($middleware) ? $middleware : $middleware::class;
+        }
+
+        return $data;
+    }
+
+    public function add(MiddlewareInterface|string $middleware): self
     {
         $this->middleware[] = $middleware;
+
+        return $this;
+    }
+
+    public function merge(MiddlewareStack $stack, bool $prepend = false): self
+    {
+        $this->middleware = $prepend
+            ? array_merge($stack->getMiddleware(), $this->middleware)
+            : array_merge($this->middleware, $stack->getMiddleware());
 
         return $this;
     }
@@ -34,5 +55,13 @@ final class MiddlewareStack implements IteratorAggregate
     public function getIterator(): Traversable
     {
         return new ArrayIterator($this->middleware);
+    }
+
+    /**
+     * @return array<int, MiddlewareInterface|string>
+     */
+    public function getMiddleware(): array
+    {
+        return $this->middleware;
     }
 }

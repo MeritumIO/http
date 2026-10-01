@@ -11,6 +11,8 @@ use Meritum\Http\Middleware\MiddlewareStack;
  */
 final class Route implements RouteInterface
 {
+    private readonly string $id;
+
     /**
      * @var non-empty-list<string>
      */
@@ -27,11 +29,13 @@ final class Route implements RouteInterface
 
     /**
      * @param non-empty-list<string> $methods
+     * @param RouteGroup[]           $groups
      */
     public function __construct(
         array $methods,
         string $path,
-        private readonly RequestHandlerInterface|string $handler
+        private readonly RequestHandlerInterface|string $handler,
+        private readonly array $groups = []
     ) {
         $this->methods = array_map('strtoupper', $methods);
 
@@ -41,12 +45,48 @@ final class Route implements RouteInterface
 
         $this->path = $path;
 
+        $this->id = $this->generateId($this->methods, $this->path);
+
         $this->middleware = new MiddlewareStack();
+    }
+
+    /**
+     * @param non-empty-list<string> $methods
+     */
+    private function generateId(array $methods, string $path): string
+    {
+        sort($methods, SORT_STRING);
+
+        return hash('xxh128', implode('|', $methods) . '_' . $path);
     }
 
     public function __clone(): void
     {
         $this->middleware = clone $this->middleware;
+    }
+
+    public function getDebugInfo(): array
+    {
+        $data = [
+            'id'         => $this->id,
+            'methods'    => $this->methods,
+            'path'       => $this->path,
+            'handler'    => is_string($this->handler) ? $this->handler : $this->handler::class,
+            'arguments'  => $this->arguments,
+            'middleware' => $this->mergeGroupMiddleware()->getDebugInfo(),
+            'groups'     => [],
+        ];
+
+        foreach ($this->groups as $group) {
+            $data['groups'][] = $group->getDebugInfo();
+        }
+
+        return $data;
+    }
+
+    public function getId(): string
+    {
+        return $this->id;
     }
 
     public function getMethods(): array
@@ -92,11 +132,36 @@ final class Route implements RouteInterface
 
     public function hasMiddleware(): bool
     {
-        return false === $this->middleware->isEmpty();
+        if (false === $this->middleware->isEmpty()) {
+            return true;
+        }
+
+        foreach ($this->groups as $group) {
+            if (false === $group->getMiddlewareStack()->isEmpty()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function mergeGroupMiddleware(): MiddlewareStack
+    {
+        if ([] === $this->groups) {
+            return $this->middleware;
+        }
+
+        $middleware = clone $this->middleware;
+
+        foreach (array_reverse($this->groups) as $group) {
+            $middleware->merge($group->getMiddlewareStack(), true);
+        }
+
+        return $middleware;
     }
 
     public function getMiddleware(): iterable
     {
-        return $this->middleware;
+        return $this->mergeGroupMiddleware();
     }
 }

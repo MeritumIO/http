@@ -4,7 +4,11 @@ namespace Meritum\Http\Middleware;
 
 use Psr\Container\ContainerInterface;
 use Psr\Http\Server\MiddlewareInterface;
+use Meritum\Http\Exception\MiddlewareStackException;
 
+/**
+ * @internal
+ */
 final class MiddlewareResolver
 {
     public function __construct(private readonly ContainerInterface $container) {}
@@ -13,17 +17,24 @@ final class MiddlewareResolver
     {
         if (is_string($middleware)) {
             $str = $middleware;
-            $middleware = $this->container->get($middleware);
 
-            if (!$middleware instanceof MiddlewareInterface) {
-                throw new \InvalidArgumentException(sprintf(
+            try {
+                $middleware = $this->container->get($middleware);
+            } catch (\Throwable $e) {
+                MiddlewareStackException::throw($e->getMessage(), $e);
+            }
+
+            MiddlewareStackException::throwIfNot(
+                $middleware instanceof MiddlewareInterface,
+                sprintf(
                     'Invalid middleware entry [%s], middleware must implement %s',
                     $str,
                     MiddlewareInterface::class
-                ));
-            }
+                )
+            );
         }
 
+        /** @var MiddlewareInterface $middleware */
         return $middleware;
     }
 }

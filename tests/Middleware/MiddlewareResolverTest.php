@@ -4,6 +4,7 @@ namespace Meritum\Http\Test\Middleware;
 
 use PHPUnit\Framework\TestCase;
 use Meritum\Http\Middleware\MiddlewareResolver;
+use Meritum\Http\Exception\MiddlewareStackException;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -67,9 +68,31 @@ final class MiddlewareResolverTest extends TestCase
             'not.middleware' => new \stdClass(),
         ]));
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(MiddlewareStackException::class);
         $this->expectExceptionMessage('not.middleware');
 
         $resolver('not.middleware');
+    }
+
+    public function test_throws_middleware_stack_exception_when_service_not_found_in_container(): void
+    {
+        $resolver = new MiddlewareResolver($this->container());
+
+        $this->expectException(MiddlewareStackException::class);
+
+        $resolver('missing.middleware');
+    }
+
+    public function test_middleware_stack_exception_preserves_the_container_exception_as_previous(): void
+    {
+        $resolver = new MiddlewareResolver($this->container());
+
+        try {
+            $resolver('missing.middleware');
+            $this->fail('Expected MiddlewareStackException');
+        } catch (MiddlewareStackException $e) {
+            $this->assertInstanceOf(\RuntimeException::class, $e->getPrevious());
+            $this->assertSame('Not found: missing.middleware', $e->getPrevious()?->getMessage());
+        }
     }
 }

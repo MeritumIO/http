@@ -4,27 +4,26 @@ namespace Meritum\Http;
 
 use Throwable;
 use Georgeff\Kernel\Kernel;
-use Georgeff\Kernel\Environment;
-use Georgeff\Kernel\Debug\Profiler;
 use Georgeff\Kernel\KernelInterface;
-use Georgeff\Kernel\KernelException;
-use Georgeff\Kernel\ServiceRegistrar;
 use Meritum\Http\Emitter\SapiEmitter;
 use Meritum\Http\Routing\RouterFactory;
 use Psr\Http\Message\ResponseInterface;
 use Meritum\Http\Routing\RouteInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Meritum\Http\Routing\RouteCollection;
+use Meritum\Http\Contract\EmitterInterface;
 use Laminas\Diactoros\ServerRequestFactory;
 use Psr\Http\Message\ServerRequestInterface;
 use Meritum\Http\Middleware\MiddlewareStack;
 use Psr\Http\Server\RequestHandlerInterface;
-use Meritum\Http\Exception\ExceptionHandlerInterface;
+use Meritum\Http\Routing\RouteGroupInterface;
+use Georgeff\Kernel\Exception\KernelException;
+use Georgeff\Kernel\Contract\EnvironmentInterface;
+use Meritum\Http\Contract\ExceptionHandlerInterface;
+use Georgeff\Kernel\Contract\ContainerBuilderInterface;
 
 final class HttpKernel extends Kernel implements HttpKernelInterface
 {
-    private ?Profiler $requestProfile = null;
-
     private readonly RouteCollection $routes;
 
     private readonly MiddlewareStack $middleware;
@@ -34,68 +33,122 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
      */
     private array $terminatingCallbacks = [];
 
-    public function __construct(Environment $environment, ?ServiceRegistrar $registrar = null, bool $debug = false)
+    private bool $handled = false;
+
+    private ?string $routeCacheFile = null;
+
+    public function __construct(EnvironmentInterface $environment, ?ContainerBuilderInterface $builder = null, bool $debug = false)
     {
-        parent::__construct($environment, $registrar, $debug);
+        parent::__construct($environment, $builder, $debug);
 
         $this->routes     = new RouteCollection();
         $this->middleware = new MiddlewareStack();
 
         $this->configure();
+
+        $this->profiler?->register($this->middleware, 'middleware');
+        $this->profiler?->register($this->routes, 'routes');
     }
 
     private function configure(): void
     {
         $this->onBooting(function () {
-            $this->define(RequestHandlerInterface::class, new RouterFactory($this->middleware, $this->routes))->share();
-            $this->define(ServerRequestInterface::class, fn() => ServerRequestFactory::fromGlobals())->share();
+            $this->defineFallback(EmitterInterface::class, fn() => new SapiEmitter())->share();
+            $this->defineFallback(ServerRequestInterface::class, fn() => ServerRequestFactory::fromGlobals())->share();
+            $this->define(
+                RequestHandlerInterface::class,
+                new RouterFactory($this->middleware, $this->routes, fn(): ?string => $this->routeCacheFile)
+            )->share();
         });
     }
 
-    private function throwIf(bool $condition, string $message): void
+    public function enableRouteCache(string $file): static
     {
-        if ($condition) {
-            throw new KernelException($message);
-        }
+        KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot enable route cache');
+
+        $this->routeCacheFile = $file;
+
+        return $this;
     }
 
-    private function throwIfShutdown(): void
+    public function group(string $prefix, callable $callback): RouteGroupInterface
     {
-        $this->throwIf($this->isShutdown(), 'Kernel is shutdown');
-    }
+        KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot add new route groups');
 
-    private function initRequestProfile(): void
-    {
-        if (!$this->isDebug()) {
-            return;
-        }
-
-        $this->requestProfile = new Profiler();
-
-        $this->requestProfile->start();
+        return $this->routes->group($prefix, $callback);
     }
 
     public function addRoute(array|string $methods, string $uri, RequestHandlerInterface|string $handler): RouteInterface
     {
-        $this->throwIf($this->isBooted(), 'Kernel has already booted, cannot add new routes');
+        KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot add new routes');
 
         $methods = is_string($methods) ? [$methods] : $methods;
 
         return $this->routes->add($methods, $uri, $handler);
     }
 
+    public function get(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['GET'], $uri, $handler);
+    }
+
+    public function post(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['POST'], $uri, $handler);
+    }
+
+    public function put(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['PUT'], $uri, $handler);
+    }
+
+    public function patch(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['PATCH'], $uri, $handler);
+    }
+
+    public function delete(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['DELETE'], $uri, $handler);
+    }
+
+    public function options(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['OPTIONS'], $uri, $handler);
+    }
+
+    public function head(string $uri, RequestHandlerInterface|string $handler): RouteInterface
+    {
+        return $this->addRoute(['HEAD'], $uri, $handler);
+    }
+
+    public function getRoutes(): iterable
+    {
+        return array_map(
+            static fn(RouteInterface $r): RouteInterface => clone $r,
+            iterator_to_array($this->routes, true)
+        );
+    }
+
     public function addMiddleware(MiddlewareInterface|string $middleware): static
     {
-        $this->throwIf($this->isBooted(), 'Kernel has already booted, cannot modify the global middleware stack');
+        KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot add middleware to the global stack');
 
         $this->middleware->add($middleware);
 
         return $this;
     }
 
+    public function addExceptionHandler(callable $factory): static
+    {
+        $this->define(ExceptionHandlerInterface::class, $factory)->share();
+
+        return $this;
+    }
+
     public function onTerminating(callable $callback): static
     {
-        $this->throwIf($this->isBooted(), 'Kernel has already booted, cannot add on terminating callbacks');
+        KernelException::throwIf($this->isBooted(), 'Kernel has already booted, cannot add terminating callbacks');
 
         $this->terminatingCallbacks[] = $callback;
 
@@ -104,111 +157,91 @@ final class HttpKernel extends Kernel implements HttpKernelInterface
 
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        $this->throwIfShutdown();
+        KernelException::throwIf($this->isShutdown(), 'Kernel is shutdown');
 
-        $this->throwIf(!$this->isBooted(), 'Kernel cannot handle requests because it has not been booted');
+        KernelException::throwIfNot($this->isBooted(), 'Kernel cannot handle requests because it has not been booted');
 
-        $ownsProfile = null === $this->requestProfile;
+        $this->handled = false;
 
-        if ($ownsProfile) {
-            $this->initRequestProfile();
-        }
-
-        $this->requestProfile?->startPhase('handle');
-
-        /** @var RequestHandlerInterface $handler */
-        $handler = $this->getContainer()->get(RequestHandlerInterface::class);
+        $profile = $this->profiler?->initProfile('handle');
 
         try {
-            $this->requestProfile?->startPhase('middleware');
+            $handler = $this->getContainer()->get(RequestHandlerInterface::class);
+
+            $profile?->startPhase('middleware');
 
             $response = $handler->handle($request);
 
-            $this->requestProfile?->stopPhase('middleware');
+            $profile?->stopPhase('middleware');
         } catch (Throwable $e) {
-            $this->requestProfile?->stopPhase('middleware');
+            $profile?->stopPhase('middleware');
 
             $exceptionHandler = $this->getExceptionHandler();
 
             if (null === $exceptionHandler) {
-                $this->requestProfile?->stopPhase('handle');
-
-                if ($ownsProfile) {
-                    $this->requestProfile?->stop();
-                }
+                $profile?->stop();
 
                 throw $e;
             }
 
-            $this->requestProfile?->startPhase('exceptionHandling');
+            $profile?->startPhase('exceptionHandling');
 
             $response = $exceptionHandler->handle($e, $request);
 
-            $this->requestProfile?->stopPhase('exceptionHandling');
+            $profile?->stopPhase('exceptionHandling');
         }
 
-        $this->requestProfile?->stopPhase('handle');
+        $this->handled = true;
 
-        if ($ownsProfile) {
-            $this->requestProfile?->stop();
-        }
+        $profile?->stop();
 
         return $response;
     }
 
     public function terminate(ServerRequestInterface $request, ResponseInterface $response): void
     {
+        KernelException::throwIfNot($this->handled, 'Cannot terminate an unhandled request');
+
+        $profile = $this->profiler?->initProfile('terminate');
+
         foreach ($this->terminatingCallbacks as $callback) {
             $callback($request, $response, $this);
         }
+
+        $profile?->stop();
     }
 
     public function run(): int
     {
-        $this->throwIfShutdown();
+        KernelException::throwIf($this->isShutdown(), 'Kernel is shutdown');
 
-        $this->throwIf(!$this->isBooted(), 'Kernel cannot run because it has not been booted');
+        $this->boot();
 
-        $this->initRequestProfile();
+        $profile = $this->profiler?->initProfile('run');
 
-        $this->requestProfile?->startPhase('requestResolution');
+        $profile?->startPhase('requestResolution');
 
-        /** @var ServerRequestInterface $request */
         $request = $this->getContainer()->get(ServerRequestInterface::class);
 
-        $this->requestProfile?->stopPhase('requestResolution');
+        $profile?->stopPhase('requestResolution');
 
         $response = $this->handle($request);
 
-        $this->requestProfile?->startPhase('emission');
+        $profile?->startPhase('emission');
 
-        new SapiEmitter()->emit($response);
+        $emitter = $this->getContainer()->get(EmitterInterface::class);
 
-        $this->requestProfile?->stopPhase('emission');
+        $emitter->emit($response);
 
-        $this->requestProfile?->startPhase('terminate');
+        $profile?->stopPhase('emission');
+
+        $profile?->stop();
 
         $this->terminate($request, $response);
-
-        $this->requestProfile?->stopPhase('terminate');
-
-        $this->requestProfile?->stop();
 
         $this->shutdown();
 
         return 0;
-    }
-
-    public function getDebugInfo(): array
-    {
-        /** @var array<string, mixed> $info */
-        $info = parent::getDebugInfo();
-
-        if (null !== $this->requestProfile) {
-            $info['requestProfile'] = $this->requestProfile->getDebugInfo();
-        }
-
-        return $info;
     }
 
     private function getExceptionHandler(): ?ExceptionHandlerInterface

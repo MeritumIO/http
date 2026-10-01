@@ -3,24 +3,34 @@
 namespace Meritum\Http;
 
 use Georgeff\Kernel\KernelInterface;
+use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
-use Meritum\Http\Routing\RouteInterface;
 use Psr\Http\Server\MiddlewareInterface;
-use Georgeff\Kernel\RunnableKernelInterface;
+use Meritum\Http\Routing\RouteInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Meritum\Http\Routing\RouteRegistrationInterface;
+use Meritum\Http\Contract\ExceptionHandlerInterface;
+use Georgeff\Kernel\Contract\RunnableKernelInterface;
 
-interface HttpKernelInterface extends KernelInterface, RunnableKernelInterface, RequestHandlerInterface
+interface HttpKernelInterface extends RunnableKernelInterface, RequestHandlerInterface, RouteRegistrationInterface
 {
     /**
-     * @param string|non-empty-list<string> $methods
+     * Enable the route cache
      */
-    public function addRoute(array|string $methods, string $uri, RequestHandlerInterface|string $handler): RouteInterface;
+    public function enableRouteCache(string $file): static;
 
     /**
      * Add a middleware to the global stack
      */
     public function addMiddleware(MiddlewareInterface|string $middleware): static;
+
+    /**
+     * Add an exception handler
+     *
+     * @param callable(ContainerInterface $container): ExceptionHandlerInterface $factory
+     */
+    public function addExceptionHandler(callable $factory): static;
 
     /**
      * Register a terminating callback
@@ -33,4 +43,11 @@ interface HttpKernelInterface extends KernelInterface, RunnableKernelInterface, 
      * Terminate a request/response cycle
      */
     public function terminate(ServerRequestInterface $request, ResponseInterface $response): void;
+
+    /**
+     * Get registered routes, keyed by route ID
+     *
+     * @return iterable<string, RouteInterface>
+     */
+    public function getRoutes(): iterable;
 }
