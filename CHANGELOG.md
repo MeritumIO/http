@@ -4,11 +4,12 @@ All notable changes to `meritum/http` are documented here.
 
 ---
 
-## [2.0.0] — Unreleased
+## [2.0.0] — 2026-09-30
 
 2.0 migrates to `georgeff/kernel` ^2.0 and is a major release with several breaking changes. This entry will be finalized when 2.0.0 actually ships; it currently reflects everything merged to the `2.x` branch so far.
 
 ### Added
+
 - `Contract\EmitterInterface` (`emit(ResponseInterface $response): void`) — response emission now goes through the container instead of `run()` constructing `SapiEmitter` directly, so a custom emitter (non-SAPI runtimes like Swoole/RoadRunner, or a test double that captures the response instead of emitting it) can be swapped in via `define(EmitterInterface::class, ...)` before boot. `SapiEmitter` implements it and remains the default
 - `HttpKernelInterface::get()`/`post()`/`put()`/`patch()`/`delete()`/`options()`/`head()` — single-method route registration shortcuts, each a thin `addRoute(['METHOD'], ...)` delegate; `addRoute()` remains the general form and the only way to bind more than one method to a route
 - `HttpKernelInterface::addExceptionHandler(callable $factory): static` — registers the exception handler via a definition-compatible callable (`callable(ContainerInterface): ExceptionHandlerInterface`) instead of requiring callers to know the container-definition mechanism directly. Takes a factory rather than a bare instance specifically so exception handlers with their own dependencies can resolve them from the container, the same way any other service does
@@ -27,6 +28,7 @@ All notable changes to `meritum/http` are documented here.
 - `HttpKernelInterface::getRoutes(): iterable<string, RouteInterface>` — introspection access to every registered route, keyed by route ID, including routes registered inside `group()` callbacks. Unlike `addRoute()`/`group()`, it has no booted guard — it can be called both before and after `boot()`
 
 ### Changed
+
 - **Breaking:** `Router::__construct()` now requires a `RouteCollection $routes` parameter (positioned before `$dispatcher`), and `RouterFactory::__construct()` now requires a third `\Closure(): ?string` parameter supplying the route cache file path (or `null` to disable caching). Internally, the FastRoute dispatcher now matches routes by `Route::getId()` instead of by the `Route` object itself, with `Router` resolving the id back to a route via `RouteCollection::get()` — necessary because `FastRoute\cachedDispatcher()` serializes its dispatch data with `var_export()`, and a `Route`/`RouteGroup` object can't round-trip through that the way a plain id string can
 - **Breaking:** migrated to `georgeff/kernel` ^2.0 — `HttpKernel::__construct()` now takes `Georgeff\Kernel\Contract\EnvironmentInterface` (e.g. `new Georgeff\Kernel\Environment\Production()`) instead of the old `Environment` enum, and `Georgeff\Kernel\Contract\ContainerBuilderInterface` instead of the old `ServiceRegistrar`
 - **Breaking:** `Exception\ExceptionHandlerInterface` moved to `Contract\ExceptionHandlerInterface`, matching the `Contract\` convention `georgeff/kernel` 2.0 uses for its own extension-point interfaces
@@ -39,4 +41,5 @@ All notable changes to `meritum/http` are documented here.
 - **Breaking:** `MiddlewareResolver` now throws `MiddlewareStackException` instead of a generic `\InvalidArgumentException` when a resolved middleware entry doesn't implement `MiddlewareInterface`, and wraps the container's own exception in `MiddlewareStackException` (previously left unwrapped) when a middleware service ID can't be resolved from the container at all (see Added)
 
 ### Removed
+
 - **Breaking:** the `'__route__'` string-key request attribute. `RouteInterface::class` is the only route attribute key now
